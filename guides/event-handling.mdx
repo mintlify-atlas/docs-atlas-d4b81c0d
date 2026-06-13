@@ -1,5 +1,5 @@
 ---
-title: "Handling Events in LWXGL Applications"
+title: "Handling Keyboard, Mouse, and Close Events in LWXGL"
 sidebarTitle: "Event Handling"
 description: "Attach callbacks for keyboard, mouse, and window-close events in LWXGL, and use polling APIs to query current input state from within your render loop."
 ---
@@ -36,6 +36,8 @@ Two key combinations are handled by LWXGL **before** your callback is invoked:
 - **F12** — toggles the debug overlay (FPS and frame-time display). The user callback is **not** called for this key.
 
 Keystrokes are also intercepted by input elements: if the cursor is inside an input element when a key is pressed, the character is appended to that element's buffer and your callback is **not** called. Only when no input element is active does the event reach your handler.
+
+Additionally, when a modal dialog is open (`GQueryModalOpen()` returns `1`), the user key callback is **not** invoked at all — the key press is still tracked in the polling state, but `GEventAttachKey` callbacks are skipped until the modal is dismissed.
 
 ### Example — WASD movement callback
 

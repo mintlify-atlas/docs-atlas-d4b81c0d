@@ -1,7 +1,7 @@
 ---
-title: "Build and Install LWXGL from Source"
+title: "Build and Install libLWXGL.so from Source on Linux"
 sidebarTitle: "Installation"
-description: "Compile libLWXGL.so with g++ and install the shared library and header to /usr/local using the provided Makefile."
+description: "Compile libLWXGL.so from source using g++ and the provided Makefile, then install the shared library and header to /usr/local with sudo."
 ---
 
 LWXGL ships as a single Makefile project with no generated build system or external dependency manager. Running `make build` in the repository root invokes `g++` with `-fPIC -shared` to produce `libLWXGL.so`. Running `make install` (as root) copies the shared object to `/usr/local/lib` and the public header `libLWXGL.h` to `/usr/local/include`, then calls `ldconfig` to register the library with the dynamic linker. The entire install footprint is two files.

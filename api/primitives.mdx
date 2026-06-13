@@ -1,7 +1,7 @@
 ---
 title: "Primitives API — Drawing into LWXGL Image Canvases"
 sidebarTitle: "Primitives"
-description: "Reference for LWXGL drawing primitives — GPrimitiveRect, GPrimitiveCircle, GPrimitiveLine, GPrimitiveSprite — that render into image element pixel buffers."
+description: "Reference for LWXGL drawing primitives — GPrimitiveRect, GPrimitiveCircle, GPrimitiveLine, GPrimitiveSprite — for writing into image pixel buffers."
 ---
 
 Drawing primitives let you paint geometric shapes and sprite graphics directly into an image element's palette-indexed pixel buffer. All coordinates passed to primitives are **canvas-relative** — `(0, 0)` is the top-left corner of the image element, not the window. Pixels outside the canvas bounds are silently clipped.
@@ -240,7 +240,7 @@ GUpdateImage(3);
 ```c
 // 5×5 diamond using skip and newline tokens
 const char* diamond =
-    "2>.$ "   // row 0: skip 2, filled, skip
+    "2>.$"    // row 0: skip 2, filled, newline
     ">###$"   // row 1: skip 1, 3 filled
     "#####$"  // row 2: 5 filled
     ">###$"   // row 3: skip 1, 3 filled

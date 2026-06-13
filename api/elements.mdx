@@ -1,7 +1,7 @@
 ---
-title: "Elements API — LWXGL Widget Functions"
+title: "Elements API — Widget Creation and Management in LWXGL"
 sidebarTitle: "Elements"
-description: "Reference for all LWXGL element creation and management functions: GCreateText, GCreateButton, GCreateInput, GCreateRect, GCreateImage, GCreateCheckbox, and more."
+description: "Reference for LWXGL element creation and management: GCreateText, GCreateButton, GCreateInput, GCreateRect, GCreateImage, GCreateCheckbox, and more."
 ---
 
 Elements are the building blocks of an LWXGL scene. Every visible widget — text, buttons, input fields, rectangles, image canvases, and checkboxes — is stored internally as an `Element` struct keyed by an integer **ID**. IDs are chosen by the caller and must be unique integers ≥ 0. Creating an element at an ID that already holds another element automatically deletes the old one first. The internal element list is a `std::vector` that grows on demand, so IDs do not need to be contiguous.

@@ -1,5 +1,5 @@
 ---
-title: "The LWXGL 16-Color Palette System"
+title: "LWXGL Color Palette: 16-Color System and Runtime Editing"
 sidebarTitle: "Color Palette"
 description: "LWXGL uses a fixed palette of 16 colors referenced by index 0–15. Learn the default colors, packed color encoding, and runtime palette modification."
 ---
@@ -31,7 +31,7 @@ The following 16 colors are loaded automatically at startup. They cover a classi
 
 ## Packed Color Encoding
 
-Several element types — Button, Input, Checkbox, and Rect — have both a **border/outline** color and a **fill/background** color. Rather than taking two separate color parameters, these elements accept a single packed byte where each nibble holds one palette index.
+Several element types — Button, Input, and Checkbox — have both a **border/outline** color and a **fill/background** color. Rather than taking two separate color parameters, these elements accept a single packed byte where each nibble holds one palette index.
 
 The encoding is:
 
@@ -56,7 +56,7 @@ Two C macros defined in `main.cc` extract each nibble:
 | `0xF0` | 15 — White | 0 — Black | White border, black fill |
 | `0x2A` | 2 — Dark Green | 10 — Light Green | Dark green border, light green fill |
 
-Pass packed values wherever a Button, Input, Checkbox, or Rect API asks for a color with both border and background behavior:
+Pass packed values wherever a Button, Input, or Checkbox API asks for a color with both border and background behavior:
 
 ```c
 // Button with: unpressed = black border + light gray fill (0x07)

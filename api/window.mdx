@@ -1,7 +1,7 @@
 ---
-title: "Window API — LWXGL Window and Loop Functions"
+title: "Window API — GCreateWindow, GSimpleWindowLoop, and More"
 sidebarTitle: "Window"
-description: "Reference for LWXGL window creation, the render loop, debug overlay, and cleanup: GCreateWindow, GSimpleWindowLoop, GTerminateWindow, and related functions."
+description: "Reference for LWXGL window creation, render loop, debug overlay, and cleanup: GCreateWindow, GSimpleWindowLoop, GTerminateWindow, and more."
 ---
 
 The Window API provides everything needed to open an X11 window, drive a frame loop, show modal dialogs, and tear down all resources on exit. Most programs call `GCreateWindow` once, register callbacks, then hand control to `GSimpleWindowLoop` — but the lower-level `GHandleWindowEvents` and `GRenderWindow` are also available for manual loop control.

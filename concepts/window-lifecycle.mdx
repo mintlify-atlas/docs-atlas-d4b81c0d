@@ -1,5 +1,5 @@
 ---
-title: "LWXGL Window Lifecycle and Render Loop"
+title: "LWXGL Window Lifecycle: Creating, Looping, and Cleanup"
 sidebarTitle: "Window Lifecycle"
 description: "Understand how LWXGL creates, renders, and destroys X11 windows — including the fixed-FPS loop, double buffering, and the window close sequence."
 ---
@@ -61,7 +61,7 @@ while (!GWindowShouldClose()) {
 void GSimpleWindowLoop(int target_fps, void (*on_every)(int));
 ```
 
-`GSimpleWindowLoop` runs the render loop at a fixed frame rate using `std::chrono` for wall-clock pacing. On each frame it calls `GHandleWindowEvents` and `GRenderWindow` automatically, then invokes your `on_every` callback with the current **tick counter** — a `unsigned long long` that starts at 0 and increments by 1 each frame. Use the tick value to schedule periodic logic without managing your own counter.
+`GSimpleWindowLoop` runs the render loop at a fixed frame rate using `std::chrono` for wall-clock pacing. On each frame it calls `GHandleWindowEvents` and `GRenderWindow` automatically, then invokes your `on_every` callback with the current **tick counter** — an `int` that starts at 0 and increments by 1 each frame. Use the tick value to schedule periodic logic without managing your own counter.
 
 To protect against timer drift (e.g. after the process is suspended), the loop detects when it has fallen more than two frame periods behind and resets the baseline time, preventing a burst of catch-up frames.
 
