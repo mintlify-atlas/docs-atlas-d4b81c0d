@@ -1,0 +1,443 @@
+---
+title: "Elements API — LWXGL Widget Functions"
+sidebarTitle: "Elements"
+description: "Reference for all LWXGL element creation and management functions: GCreateText, GCreateButton, GCreateInput, GCreateRect, GCreateImage, GCreateCheckbox, and more."
+---
+
+Elements are the building blocks of an LWXGL scene. Every visible widget — text, buttons, input fields, rectangles, image canvases, and checkboxes — is stored internally as an `Element` struct keyed by an integer **ID**. IDs are chosen by the caller and must be unique integers ≥ 0. Creating an element at an ID that already holds another element automatically deletes the old one first. The internal element list is a `std::vector` that grows on demand, so IDs do not need to be contiguous.
+
+| Type Index | Element Kind | Created By |
+|:---:|---|---|
+| 0 | Text label | `GCreateText` |
+| 1 | Button | `GCreateButton` |
+| 2 | Text input | `GCreateInput` |
+| 3 | Rectangle | `GCreateRect` |
+| 4 | Image canvas | `GCreateImage` |
+| 5 | Checkbox | `GCreateCheckbox` |
+
+---
+
+### GCreateText
+
+```c
+void GCreateText(int id, int x, int y, int color, const char* text);
+```
+
+Creates a text label rendered using the `9x15` bitmap font. The text pointer is stored directly — do not free or mutate the string while the element is alive.
+
+<ParamField path="id" type="int">
+  Unique element ID. If an element already occupies this ID it is deleted first.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge of the text in window coordinates (pixels from left).
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge of the text baseline in window coordinates. The first character baseline is drawn at `y + 11`; subsequent lines are 16 pixels apart.
+</ParamField>
+
+<ParamField path="color" type="int">
+  Palette index (0–15) for the text foreground color.
+</ParamField>
+
+<ParamField path="text" type="const char*">
+  Null-terminated string to display. Newlines (`\n`) are supported; each line is drawn on a separate baseline. Font metrics are 9 pixels wide × 15 pixels tall per character.
+</ParamField>
+
+```c
+GCreateText(0, 10, 10, 15, "Hello, World!");
+GCreateText(1, 10, 30, 10, "Line one\nLine two\nLine three");
+```
+
+---
+
+### GCreateButton
+
+```c
+void GCreateButton(int id, int x, int y, int w, int h,
+                   int u, int hvr, int p,
+                   const char* label, void (*onclick)(void));
+```
+
+Creates a clickable button with three visual states: unpressed, hovered, and pressed. Each state is encoded as a single `int` where the **high nibble** is the border color palette index and the **low nibble** is the fill color palette index.
+
+<ParamField path="id" type="int">
+  Unique element ID.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge of the button in window coordinates.
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge of the button in window coordinates.
+</ParamField>
+
+<ParamField path="w" type="int">
+  Width of the button in pixels.
+</ParamField>
+
+<ParamField path="h" type="int">
+  Height of the button in pixels.
+</ParamField>
+
+<ParamField path="u" type="int">
+  Packed color byte for the **unpressed** state. High nibble = border palette index, low nibble = fill palette index. Example: `0x7F` → border index 7 (Light Gray), fill index 15 (White).
+</ParamField>
+
+<ParamField path="hvr" type="int">
+  Packed color byte for the **hover** state (cursor inside bounds). Same encoding as `u`.
+</ParamField>
+
+<ParamField path="p" type="int">
+  Packed color byte for the **pressed** state (left mouse button held inside bounds). Same encoding as `u`.
+</ParamField>
+
+<ParamField path="label" type="const char*">
+  Text drawn centered inside the button using the border color of the current state.
+</ParamField>
+
+<ParamField path="onclick" type="void (*)(void)">
+  Called when the left mouse button is released inside the button bounds. Only fires for button `1` (left click); right/middle clicks are ignored. Not called when a modal is open. May be `NULL`.
+</ParamField>
+
+```c
+void on_click(void) { printf("Clicked!\n"); }
+
+// Border: Light Gray (7), Fill: Dark Gray (8) unpressed
+// Border: White (15), Fill: Dark Blue (1) hover
+// Border: White (15), Fill: Dark Cyan (3) pressed
+GCreateButton(2, 100, 50, 120, 30, 0x78, 0xF1, 0xF3, "Click Me", on_click);
+```
+
+---
+
+### GCreateInput
+
+```c
+void GCreateInput(int id, int x, int y, int w, int h,
+                  int u, int hvr, int max);
+```
+
+Creates a single-line text input box. The input captures keystroke events when the mouse cursor is inside the element bounds. Backspace (ASCII 8) removes the last character; printable ASCII characters (32–126) are appended up to `max` characters.
+
+<ParamField path="id" type="int">
+  Unique element ID.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge in window coordinates.
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge in window coordinates.
+</ParamField>
+
+<ParamField path="w" type="int">
+  Width in pixels. Pass `-1` to auto-size to `(max + 1) * 9 + 10` pixels, which gives enough room to display `max` characters in the 9-pixel-wide font plus a small margin.
+</ParamField>
+
+<ParamField path="h" type="int">
+  Height in pixels.
+</ParamField>
+
+<ParamField path="u" type="int">
+  Packed color byte for the **inactive** state. High nibble = border palette index, low nibble = fill palette index.
+</ParamField>
+
+<ParamField path="hvr" type="int">
+  Packed color byte for the **active/hovered** state. Same encoding as `u`. A blinking underscore cursor is appended to the text when the field is hovered.
+</ParamField>
+
+<ParamField path="max" type="int">
+  Maximum number of characters the user may type. Capped internally at 127 due to the fixed 128-byte buffer (one byte reserved for the null terminator).
+</ParamField>
+
+```c
+// Auto-width input, max 20 characters
+// Inactive: border=Dark Gray(8), fill=Black(0)  → 0x80
+// Hover:    border=White(15),    fill=Black(0)  → 0xF0
+GCreateInput(3, 10, 100, -1, 24, 0x80, 0xF0, 20);
+```
+
+---
+
+### GGetInput
+
+```c
+char* GGetInput(int id);
+```
+
+Returns a pointer to the element's internal null-terminated 128-byte character buffer. The pointer remains valid as long as the element exists. Read the value; do not free the pointer.
+
+<ParamField path="id" type="int">
+  ID of an existing input element.
+</ParamField>
+
+```c
+const char* text = GGetInput(3);
+printf("User typed: %s\n", text);
+```
+
+---
+
+### GCreateRect
+
+```c
+void GCreateRect(int id, int x, int y, int w, int h, int fg, int bg);
+```
+
+Creates a solid or outlined rectangle rendered directly using X11 drawing primitives each frame.
+
+<ParamField path="id" type="int">
+  Unique element ID.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge in window coordinates.
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge in window coordinates.
+</ParamField>
+
+<ParamField path="w" type="int">
+  Width in pixels.
+</ParamField>
+
+<ParamField path="h" type="int">
+  Height in pixels.
+</ParamField>
+
+<ParamField path="fg" type="int">
+  Palette index for the outline (border). Pass `-1` to skip drawing the outline entirely.
+</ParamField>
+
+<ParamField path="bg" type="int">
+  Palette index for the fill. Pass `-1` to skip filling (transparent interior).
+</ParamField>
+
+```c
+GCreateRect(4, 50, 50, 200, 100, 15, 0);  // White border, black fill
+GCreateRect(5, 60, 60, 180, 80, -1, 2);   // No border, dark-green fill
+```
+
+---
+
+### GCreateImage
+
+```c
+void GCreateImage(int id, int x, int y, int w, int h);
+```
+
+Creates an image canvas backed by an `XImage` and a palette-indexed pixel buffer. Each pixel is one byte (palette index 0–15). A second shadow buffer of the same size is allocated for diffing so that `GUpdateImage` only writes pixels that have actually changed.
+
+<ParamField path="id" type="int">
+  Unique element ID.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge of the canvas in window coordinates.
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge of the canvas in window coordinates.
+</ParamField>
+
+<ParamField path="w" type="int">
+  Canvas width in pixels.
+</ParamField>
+
+<ParamField path="h" type="int">
+  Canvas height in pixels.
+</ParamField>
+
+```c
+GCreateImage(10, 0, 0, 320, 240); // 320×240 canvas at origin
+```
+
+---
+
+### GGetImageData
+
+```c
+unsigned char* GGetImageData(int id);
+```
+
+Returns a pointer to the image element's pixel data buffer — a flat array of `w × h` bytes stored in row-major order. Each byte is a palette index (0–15). You write palette indices directly into this buffer, then call `GUpdateImage` to propagate changes to the `XImage`.
+
+<ParamField path="id" type="int">
+  ID of an existing image element.
+</ParamField>
+
+Pixel at `(x, y)` is at offset `y * w + x`.
+
+```c
+unsigned char* pixels = GGetImageData(10);
+int w = 320, h = 240;
+// Draw a horizontal line at y=100 in red (palette index 4)
+for (int x = 0; x < w; x++) {
+    pixels[100 * w + x] = 4;
+}
+GUpdateImage(10);
+```
+
+---
+
+### GUpdateImage
+
+```c
+void GUpdateImage(int id);
+```
+
+Compares the current pixel buffer against the internal shadow (previous-frame) buffer and calls `XImage::put_pixel` for every byte that differs. After writing, the shadow is updated to match. This diff avoids redundant pixel writes and keeps updates fast when only a small portion of the canvas changes.
+
+<ParamField path="id" type="int">
+  ID of an existing image element.
+</ParamField>
+
+<Note>
+  `GUpdateImage` updates the `XImage` in memory. The image is composited onto the back buffer during the next `GRenderWindow` call. You do **not** need to call `GRenderWindow` yourself if you are inside `GSimpleWindowLoop` — it is called automatically each frame.
+</Note>
+
+---
+
+### GClearImage
+
+```c
+void GClearImage(int id, int c);
+```
+
+Sets every pixel in the image element's data buffer to palette index `c` using `memset`. Does not call `GUpdateImage` — you must call it yourself after clearing if you want the change to appear.
+
+<ParamField path="id" type="int">
+  ID of an existing image element.
+</ParamField>
+
+<ParamField path="c" type="int">
+  Palette index to fill every pixel with.
+</ParamField>
+
+```c
+GClearImage(10, 0);  // Fill canvas with black (index 0)
+GUpdateImage(10);    // Push the clear to the XImage
+```
+
+---
+
+### GCreateCheckbox
+
+```c
+void GCreateCheckbox(int id, int x, int y, int size,
+                     int cb_col, int txt_col, const char* label);
+```
+
+Creates a square checkbox widget. Clicking inside the checkbox square toggles its checked state. An optional text label is drawn to the right of the box.
+
+<ParamField path="id" type="int">
+  Unique element ID.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge of the checkbox square in window coordinates.
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge of the checkbox square in window coordinates.
+</ParamField>
+
+<ParamField path="size" type="int">
+  Side length of the checkbox square in pixels. The same value is used for both width and height.
+</ParamField>
+
+<ParamField path="cb_col" type="int">
+  Packed color byte for the checkbox square. High nibble = border palette index, low nibble = fill palette index.
+</ParamField>
+
+<ParamField path="txt_col" type="int">
+  Palette index for the label text drawn to the right of the box.
+</ParamField>
+
+<ParamField path="label" type="const char*">
+  Optional label string. Pass `NULL` to render the checkbox with no label. The label is drawn 3 pixels to the right of the box, vertically centered.
+</ParamField>
+
+```c
+// 16×16 checkbox: border=White(F), fill=Black(0), label in white
+GCreateCheckbox(6, 20, 200, 16, 0xF0, 15, "Enable option");
+GCreateCheckbox(7, 20, 220, 16, 0xF0, 15, NULL); // No label
+```
+
+---
+
+### GGetCheckbox
+
+```c
+int GGetCheckbox(int id);
+```
+
+Returns `1` if the checkbox is currently checked, `0` if it is unchecked.
+
+<ParamField path="id" type="int">
+  ID of an existing checkbox element.
+</ParamField>
+
+```c
+if (GGetCheckbox(6)) {
+    printf("Option is enabled\n");
+}
+```
+
+---
+
+### GDeleteElement
+
+```c
+void GDeleteElement(int index);
+```
+
+Frees the element at `index`. For image elements (type `4`), this also destroys the `XImage` and frees both the pixel data buffer and the shadow buffer. The element slot is set to `NULL`; the slot may be reused by any subsequent `GCreate*` call with the same ID. No-ops if `index` is out of range or the slot is already `NULL`.
+
+<ParamField path="index" type="int">
+  ID of the element to delete.
+</ParamField>
+
+```c
+GDeleteElement(10); // Free image canvas 10
+```
+
+---
+
+### GElemModifyBounds
+
+```c
+void GElemModifyBounds(int id, int x, int y, int w, int h);
+```
+
+Updates the position and size of an existing element in-place without recreating it. The change takes effect on the next rendered frame. Works for all element types, but note that for image elements the underlying `XImage` dimensions are not reallocated — only the draw position and the dimensions used for hit-testing and rendering are updated.
+
+<ParamField path="id" type="int">
+  ID of the element to modify.
+</ParamField>
+
+<ParamField path="x" type="int">
+  New left edge in window coordinates.
+</ParamField>
+
+<ParamField path="y" type="int">
+  New top edge in window coordinates.
+</ParamField>
+
+<ParamField path="w" type="int">
+  New width.
+</ParamField>
+
+<ParamField path="h" type="int">
+  New height.
+</ParamField>
+
+```c
+// Move button 2 to a new position without rebuilding it
+GElemModifyBounds(2, 200, 100, 120, 30);
+```

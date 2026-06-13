@@ -1,0 +1,281 @@
+---
+title: "Working with LWXGL UI Elements"
+sidebarTitle: "UI Elements"
+description: "Create and manage LWXGL's six widget types — text labels, buttons, input fields, rectangles, checkboxes — with parameter details and usage examples."
+---
+
+LWXGL provides six built-in element types: text labels, buttons, input fields, rectangles, images, and checkboxes. Each is created by calling its constructor function with an integer ID and position/size parameters. Elements are stored in a global vector indexed by ID, and the renderer iterates over every non-NULL slot on every frame — so once you create an element, it is drawn automatically without any additional calls.
+
+<Tabs>
+  <Tab title="Text">
+    ## Text Labels
+
+    Text elements render a string at a fixed position using the library's built-in 9×15 bitmap font. The string is rendered in a single palette color and supports newlines for multiline output.
+
+    **Signature**
+
+    ```c
+    void GCreateText(int id, int x, int y, int color, const char* text);
+    ```
+
+    | Parameter | Description |
+    |-----------|-------------|
+    | `id` | Element ID. If an element with this ID already exists it is destroyed and replaced. |
+    | `x`, `y` | Top-left position of the text baseline in pixels. |
+    | `color` | Palette index (0–15) used to draw the text. |
+    | `text` | The string to display. Use `\n` to start a new line; each line is 16 px tall. |
+
+    **Creating a text label**
+
+    ```c
+    // White (palette index 15) label at (10, 10)
+    GCreateText(0, 10, 10, 15, "Score: 0");
+    ```
+
+    **Updating a label**
+
+    Re-calling `GCreateText` with the same ID replaces the existing element in-place. The old element is freed and a new one is allocated at the same slot.
+
+    ```c
+    // Later, update the score — same ID, same position, new string
+    GCreateText(0, 10, 10, 15, "Score: 100");
+    ```
+
+    **Multiline text**
+
+    ```c
+    GCreateText(1, 20, 50, 11, "Line one\nLine two\nLine three");
+    ```
+  </Tab>
+
+  <Tab title="Button">
+    ## Buttons
+
+    Button elements respond to left-clicks and change appearance on hover and press. Each state (unpressed, hover, pressed) has its own packed color byte that encodes both a border color and a fill color.
+
+    **Signature**
+
+    ```c
+    void GCreateButton(int id, int x, int y, int w, int h,
+                       int u, int hvr, int p,
+                       const char* label, void (*onclick)(void));
+    ```
+
+    | Parameter | Description |
+    |-----------|-------------|
+    | `id` | Element ID. |
+    | `x`, `y` | Top-left corner in pixels. |
+    | `w`, `h` | Width and height in pixels. |
+    | `u` | Packed color byte for the **unpressed** state. |
+    | `hvr` | Packed color byte for the **hover** state (cursor inside bounds). |
+    | `p` | Packed color byte for the **pressed** state (left mouse button held). |
+    | `label` | Text centered inside the button. |
+    | `onclick` | Function called on left-button release inside the button bounds. Pass `NULL` for no callback. |
+
+    **Packed color encoding**
+
+    Each color byte encodes two palette indices in a single `int`:
+
+    - **High nibble** → border (outline) color index
+    - **Low nibble** → fill color index
+
+    For example, `0x78` sets border color 7 (light gray) and fill color 8 (dark gray).
+
+    ```c
+    //  high nibble = 7 (light gray border)
+    //  low nibble  = 8 (dark gray fill)
+    int style_normal = 0x78;
+    int style_hover  = 0x87; // inverted on hover
+    int style_press  = 0x00; // black on press
+    ```
+
+    **Example button with a click handler**
+
+    ```c
+    #include <stdio.h>
+    #include "libLWXGL.h"
+
+    void on_click(void) {
+        printf("Button clicked!\n");
+    }
+
+    // 120×30 button, dark fill with light border, at (50, 100)
+    GCreateButton(0, 50, 100, 120, 30, 0x78, 0x87, 0x00, "Click Me", on_click);
+    ```
+  </Tab>
+
+  <Tab title="Input">
+    ## Input Fields
+
+    Input elements capture keyboard input when the mouse cursor is hovering over them. Characters typed while the cursor is inside the element are appended to an internal 128-byte buffer; backspace removes the last character.
+
+    **Signature**
+
+    ```c
+    void GCreateInput(int id, int x, int y, int w, int h, int u, int hvr, int max);
+    ```
+
+    | Parameter | Description |
+    |-----------|-------------|
+    | `id` | Element ID. |
+    | `x`, `y` | Top-left corner in pixels. |
+    | `w` | Width in pixels. Pass `-1` to auto-size based on `max` — the library computes `(max + 1) * 9 + 10`. |
+    | `h` | Height in pixels. |
+    | `u` | Packed color byte (high nibble = border, low nibble = fill) for the **inactive** state. |
+    | `hvr` | Packed color byte for the **hover/active** state. |
+    | `max` | Maximum number of characters accepted (up to 127). |
+
+    **Reading the value**
+
+    ```c
+    char* GGetInput(int id);
+    ```
+
+    Returns a pointer to the element's internal 128-byte null-terminated buffer. The pointer is valid as long as the element exists.
+
+    **Example — input field with a submit button**
+
+    ```c
+    #include <stdio.h>
+    #include "libLWXGL.h"
+
+    void on_submit(void) {
+        char* value = GGetInput(0);   // read from input element 0
+        printf("Submitted: %s\n", value);
+    }
+
+    void setup(void) {
+        // Auto-sized input, max 20 chars, white-on-black inactive, yellow-on-black hover
+        GCreateInput(0, 50, 80, -1, 24, 0xF0, 0xE0, 20);
+
+        // Submit button next to the input
+        GCreateButton(1, 250, 80, 70, 24, 0xA2, 0x2A, 0x00, "Submit", on_submit);
+    }
+    ```
+
+    <Note>
+      Input elements capture keystrokes only while the mouse cursor is positioned **inside** the element's bounds. Moving the cursor away immediately stops capturing input. A blinking underscore cursor is shown when the field is active.
+    </Note>
+  </Tab>
+
+  <Tab title="Rect">
+    ## Rectangles
+
+    Rectangle elements draw a filled and/or outlined rectangle using palette colors. They are useful for background panels, section dividers, and decorative frames.
+
+    **Signature**
+
+    ```c
+    void GCreateRect(int id, int x, int y, int w, int h, int fg, int bg);
+    ```
+
+    | Parameter | Description |
+    |-----------|-------------|
+    | `id` | Element ID. |
+    | `x`, `y` | Top-left corner in pixels. |
+    | `w`, `h` | Width and height in pixels. |
+    | `fg` | Palette index for the outline color. Pass `-1` to skip the outline. |
+    | `bg` | Palette index for the fill color. Pass `-1` to skip the fill. |
+
+    **Examples**
+
+    ```c
+    // Solid dark-gray background panel (no outline)
+    GCreateRect(0, 0, 0, 400, 300, -1, 8);
+
+    // White-outlined frame with no fill (transparent interior)
+    GCreateRect(1, 10, 10, 380, 280, 15, -1);
+
+    // Filled panel with a border
+    GCreateRect(2, 50, 50, 200, 100, 15, 0);
+    ```
+  </Tab>
+
+  <Tab title="Checkbox">
+    ## Checkboxes
+
+    Checkbox elements render a small square that toggles between checked and unchecked each time the user left-clicks inside it. An optional text label is drawn to the right.
+
+    **Signature**
+
+    ```c
+    void GCreateCheckbox(int id, int x, int y, int size,
+                         int cb_col, int txt_col, const char* label);
+    ```
+
+    | Parameter | Description |
+    |-----------|-------------|
+    | `id` | Element ID. |
+    | `x`, `y` | Top-left corner of the checkbox square in pixels. |
+    | `size` | Side length of the checkbox square in pixels. |
+    | `cb_col` | Packed color byte: high nibble = border, low nibble = fill of the checkbox square. |
+    | `txt_col` | Palette index for the label text color. |
+    | `label` | Text displayed to the right of the checkbox. Pass `NULL` for no label. |
+
+    **Reading the state**
+
+    ```c
+    int GGetCheckbox(int id);
+    ```
+
+    Returns `1` if the checkbox is currently checked, `0` if not.
+
+    **Example**
+
+    ```c
+    #include <stdio.h>
+    #include "libLWXGL.h"
+
+    void setup(void) {
+        // 16×16 checkbox, white border / black fill, white label text
+        GCreateCheckbox(0, 20, 20, 16, 0xF0, 15, "Enable fullscreen");
+    }
+
+    void on_frame(int tick) {
+        if (GGetCheckbox(0)) {
+            // checkbox is checked
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Modifying Element Bounds
+
+You can reposition or resize any element at runtime without destroying and recreating it:
+
+```c
+void GElemModifyBounds(int id, int x, int y, int w, int h);
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `id` | ID of the element to modify. |
+| `x`, `y` | New top-left position. |
+| `w`, `h` | New width and height. |
+
+```c
+// Move element 2 to (100, 200) and resize to 300×50
+GElemModifyBounds(2, 100, 200, 300, 50);
+```
+
+<Note>
+  `GElemModifyBounds` updates the bounding box used by both the renderer and the hit-testing logic for buttons, inputs, and checkboxes. For image elements the underlying pixel buffer is **not** resized — only the draw position and clipping bounds change.
+</Note>
+
+---
+
+## Deleting Elements
+
+```c
+void GDeleteElement(int id);
+```
+
+Frees the element and its associated memory. The slot is set to `NULL` and is safely skipped by the renderer and event system on subsequent frames. For image elements (type 4) the underlying `XImage` is also destroyed with `XDestroyImage`.
+
+```c
+// Remove the button created at slot 1
+GDeleteElement(1);
+```

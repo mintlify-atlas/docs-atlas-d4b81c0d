@@ -1,0 +1,151 @@
+---
+title: "LWXGL Window Lifecycle and Render Loop"
+sidebarTitle: "Window Lifecycle"
+description: "Understand how LWXGL creates, renders, and destroys X11 windows — including the fixed-FPS loop, double buffering, and the window close sequence."
+---
+
+Every LWXGL application follows a predictable lifecycle: you open a window with `GCreateWindow`, run a render loop that processes events and redraws the screen each frame, then clean up all X11 resources with `GTerminateWindow` once the loop exits. Understanding this flow is essential before adding any elements or event handlers.
+
+## Creating a Window
+
+`GCreateWindow` initialises the X11 display connection, loads the font, allocates the 16-entry color palette, creates the window, and prepares the off-screen back buffer used for double buffering. All four parameters are required.
+
+```c
+int GCreateWindow(int w, int h, const char* name, int bgcol);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `w` | `int` | Window width in pixels |
+| `h` | `int` | Window height in pixels |
+| `name` | `const char*` | Title bar text shown by the window manager |
+| `bgcol` | `int` | Background color as a palette index (0–15) |
+
+The window size is fixed for its entire lifetime — LWXGL sets both the minimum and maximum size hints to the same values via `XSetWMNormalHints`, so the user cannot resize the window.
+
+`GCreateWindow` returns one of four status codes:
+
+| Return value | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Could not open X11 display (no `$DISPLAY` set, or display unavailable) |
+| `2` | Could not load the `9x15` bitmap font |
+| `3` | A window is already open (only one window is supported at a time) |
+
+```c
+int result = GCreateWindow(800, 600, "My App", 0);
+```
+
+<Note>
+Always check the return value of `GCreateWindow` before entering the render loop. Proceeding on a non-zero return means the X11 display, font, or back-buffer Pixmap was never initialised, and every subsequent LWXGL call will crash or silently corrupt memory.
+</Note>
+
+## The Render Loop
+
+Once the window is open you need a loop that processes pending X11 events and redraws the screen every frame. LWXGL provides both a manual pattern and a convenience wrapper.
+
+### Manual loop
+
+Call `GWindowShouldClose()`, `GHandleWindowEvents()`, and `GRenderWindow()` yourself when you need direct control over timing:
+
+```c
+while (!GWindowShouldClose()) {
+    GHandleWindowEvents(); // process keyboard, mouse, and WM events
+    GRenderWindow();       // clear back buffer, draw all elements, flip
+}
+```
+
+### `GSimpleWindowLoop` — fixed-FPS convenience loop
+
+```c
+void GSimpleWindowLoop(int target_fps, void (*on_every)(int));
+```
+
+`GSimpleWindowLoop` runs the render loop at a fixed frame rate using `std::chrono` for wall-clock pacing. On each frame it calls `GHandleWindowEvents` and `GRenderWindow` automatically, then invokes your `on_every` callback with the current **tick counter** — a `unsigned long long` that starts at 0 and increments by 1 each frame. Use the tick value to schedule periodic logic without managing your own counter.
+
+To protect against timer drift (e.g. after the process is suspended), the loop detects when it has fallen more than two frame periods behind and resets the baseline time, preventing a burst of catch-up frames.
+
+```c
+void my_update(int tick) {
+    // Called once per frame. tick == 0 on the first frame.
+    if (tick % 60 == 0) {
+        // do something every 60 frames
+    }
+}
+
+int main() {
+    if (GCreateWindow(800, 600, "My App", 0) != 0) return 1;
+
+    // ... create elements ...
+
+    GSimpleWindowLoop(60, my_update); // target 60 FPS
+
+    GTerminateWindow();
+    return 0;
+}
+```
+
+<Note>
+`on_every` may be `NULL` if you have no per-frame logic outside of event-driven callbacks.
+</Note>
+
+## Double Buffering
+
+Every frame, `GRenderWindow` fills an off-screen `Pixmap` (`bb`, the back buffer) with the background color, draws all elements into it, and — only at the very end — copies the completed image to the visible window with a single `XCopyArea` call followed by `XSync`. The window surface is never drawn to directly.
+
+This prevents the tearing and partial-draw flicker that would result from drawing elements one by one to the visible surface. From the user's perspective the window appears to update atomically on every frame.
+
+## Closing and Cleanup
+
+### Detecting close intent
+
+```c
+int GWindowShouldClose();
+```
+
+Returns `1` once the close sequence has been triggered, and `0` otherwise. Both the manual loop and `GSimpleWindowLoop` use this flag as their loop condition.
+
+### Triggering a close
+
+```c
+void GDeleteWindow();
+```
+
+`GDeleteWindow` initiates a controlled shutdown. If you have attached a delete handler via `GEventAttachDelete`, that handler is called first and its return value is used as the `closing` flag (allowing you to intercept or cancel the close, e.g. to show a confirmation modal). If no handler is attached, `closing` is set to `1` immediately.
+
+`GDeleteWindow` is called automatically by the event system when the user clicks the window manager's close button (the `WM_DELETE_WINDOW` protocol). You can also call it programmatically to trigger an application exit.
+
+### Freeing resources
+
+```c
+void GTerminateWindow();
+```
+
+`GTerminateWindow` must be called after the render loop exits. It frees all X11 and LWXGL resources in this order:
+
+<Steps>
+  <Step title="Delete all elements">
+    Iterates the element array and calls `GDeleteElement` on each non-NULL slot, freeing element structs and XImage data for image elements.
+  </Step>
+  <Step title="Free font and GC">
+    Releases the `9x15` font with `XFreeFont` and destroys the graphics context with `XFreeGC`.
+  </Step>
+  <Step title="Free Pixmaps">
+    Destroys the back buffer (`bb`) and the stipple Pixmap with `XFreePixmap`.
+  </Step>
+  <Step title="Free palette colors">
+    Returns all 16 allocated X11 color cells to the colormap with `XFreeColors`.
+  </Step>
+  <Step title="Destroy window and close display">
+    Destroys the X11 window with `XDestroyWindow` and closes the display connection with `XCloseDisplay`.
+  </Step>
+</Steps>
+
+## Debug Overlay
+
+When you use `GSimpleWindowLoop`, pressing **F12** toggles an on-screen debug overlay rendered in the top-left corner of the window. The overlay displays two live metrics sampled over a rolling 60-frame window:
+
+- **FT** — average frame time in microseconds (µs)
+- **FPS** — measured frames per second as a floating-point value
+
+The overlay is only available inside `GSimpleWindowLoop` (it requires the loop's frame-timing infrastructure to populate the metrics). It has no effect when using the manual loop pattern.

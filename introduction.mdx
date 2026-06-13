@@ -1,0 +1,60 @@
+---
+title: "LWXGL: Lightweight X11 GUI Library for C and C++"
+sidebarTitle: "Introduction"
+description: "LWXGL is a minimal C shared library that wraps X11/Xlib so you can build GUI applications with windows, widgets, image canvases, and event handling."
+---
+
+LWXGL is a lightweight shared library that wraps X11/Xlib and exposes a flat C API, letting you build desktop GUI applications from plain C or C++ without pulling in a heavyweight toolkit. The entire public interface lives in a single header — `libLWXGL.h` — and the library compiles down to a single shared object, `libLWXGL.so`. Every function follows a consistent `G`-prefixed naming scheme, and all state is managed internally so your application code stays free of boilerplate.
+
+## Design Principles
+
+LWXGL is built around three core ideas that keep both the library and the programs written with it small and predictable.
+
+**Palette-indexed 16-color system.** Every color in LWXGL is referenced by an index from `0` to `15`, mapping to a fixed CGA-style palette that runs from black (`0`) through dark and light variants of the standard eight ANSI colors up to white (`15`). The palette can be queried and modified at runtime with `GPaletteQuery`, `GPaletteModify`, and `GPaletteReset`. For multi-color attributes (such as button states), two palette indices are packed into a single byte: the high nibble — extracted with the `H(byte)` macro — carries one color and the low nibble — extracted with `L(byte)` — carries the other.
+
+**Integer-ID element model.** Every UI element (text label, button, input field, rectangle, image canvas, checkbox) is identified by a caller-supplied integer ID. You create an element by calling the appropriate `GCreate*` function with your chosen ID; you remove it with `GDeleteElement(id)`; and you update or query it by passing the same ID to helper functions such as `GGetInput`, `GGetCheckbox`, or `GUpdateImage`. There are no opaque handle types or heap-allocated objects to manage on your side.
+
+**Double-buffered rendering.** All rendering is performed into an off-screen `Pixmap` back-buffer and then blitted to the window in one shot, eliminating visible tearing. The render step runs automatically inside `GSimpleWindowLoop`, or you can drive it manually by calling `GHandleWindowEvents` and `GRenderWindow` yourself.
+
+## Element Types
+
+LWXGL supports six kinds of UI elements:
+
+| Element | Create function | Description |
+|---------|----------------|-------------|
+| **Text** | `GCreateText` | Static or dynamic text label |
+| **Button** | `GCreateButton` | Clickable button with hover and pressed states |
+| **Input** | `GCreateInput` | Single-line text input field |
+| **Rectangle** | `GCreateRect` | Filled or outlined rectangle widget |
+| **Image canvas** | `GCreateImage` | Raw pixel canvas you write to with drawing primitives |
+| **Checkbox** | `GCreateCheckbox` | Toggleable checkbox with a text label |
+
+## Key Capabilities
+
+- **Window lifecycle** — `GCreateWindow`, `GTerminateWindow`, `GWindowShouldClose`, `GDeleteWindow`
+- **Fixed-FPS main loop** — `GSimpleWindowLoop(fps, on_every_frame)` caps frame rate using `std::chrono` and sleeps the thread between frames
+- **Event callbacks** — attach handlers for key presses (`GEventAttachKey`), raw mouse clicks (`GEventAttachClick`), and window-close (`GEventAttachDelete`); poll with `GQueryMouse`, `GQueryKeyboard`, and `GQueryKeyDown`
+- **Modal dialogs** — `GSpawnModal` pops a blocking dialog; `GQueryModalOpen` lets you test whether one is active
+- **Drawing primitives on image canvases** — `GPrimitiveRect`, `GPrimitiveCircle`, `GPrimitiveLine`, `GPrimitiveSprite` all target a canvas element by ID
+- **Debug overlay** — press <kbd>F12</kbd> at runtime to toggle a heads-up display showing live FPS and per-frame work time averaged over the last 60 frames
+
+<Note>
+  LWXGL requires a running X11 display server. Internally it calls `XOpenDisplay(NULL)`, which reads the `DISPLAY` environment variable. If no X server is reachable, `GCreateWindow` returns `1` and no window is created. Make sure `DISPLAY` is set (e.g., `export DISPLAY=:0`) before launching your application.
+</Note>
+
+## Explore the Docs
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Open a window, add a button, and run your first LWXGL program in under 5 minutes.
+  </Card>
+  <Card title="Build & Install" icon="wrench" href="/building-and-installing">
+    Compile `libLWXGL.so` from source and install it system-wide with the provided Makefile.
+  </Card>
+  <Card title="Window Lifecycle" icon="window" href="/concepts/window-lifecycle">
+    Understand how to create, render, and destroy windows — manually or via the simple loop.
+  </Card>
+  <Card title="Element System" icon="layer-group" href="/concepts/element-system">
+    Deep-dive into the integer-ID element model, element types, and how the renderer uses them.
+  </Card>
+</CardGroup>

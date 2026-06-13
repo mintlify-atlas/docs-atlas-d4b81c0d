@@ -1,0 +1,197 @@
+---
+title: "LWXGL Element System and ID Model"
+sidebarTitle: "Element System"
+description: "Every LWXGL widget is an element stored by integer ID. Learn how element IDs work, the six element types, creation, deletion, and bounds modification."
+---
+
+LWXGL manages all on-screen widgets through a single flat array of elements, where each element is identified by an integer ID that you choose. The renderer iterates this array in ascending ID order on every frame, drawing each non-NULL element in sequence. Because the array grows on demand and IDs are entirely user-managed, you have full control over draw order and element identity throughout your application's lifetime.
+
+## Element IDs
+
+Elements are stored in a `std::vector<Element*>` that is resized automatically whenever you use an ID larger than its current length. Any non-negative integer is a valid ID — you are not constrained to a small range.
+
+The key rule is: **creating an element with an ID that already exists silently replaces the previous one.** The old element is freed (including any XImage data for image elements) before the new element is allocated into the same slot. This makes it straightforward to "update" an element by recreating it with the same ID.
+
+```c
+// Initial label
+GCreateText(0, 10, 10, 15, "Loading...");
+
+// Later — replace element 0 with updated text.
+// The old TextElement is freed automatically.
+GCreateText(0, 10, 10, 15, "Ready.");
+```
+
+<Note>
+Element IDs are entirely user-managed — LWXGL never auto-assigns an ID. Plan your ID namespace in advance to avoid accidental collisions between different parts of your application. A common convention is to allocate ID ranges per logical screen or subsystem (e.g. 0–9 for the main menu, 10–19 for the settings panel).
+</Note>
+
+## Element Types
+
+LWXGL supports six built-in element types, each rendered by a dedicated function in `renderer.cc`.
+
+| Type ID | Name | Create function | Description |
+|---------|------|-----------------|-------------|
+| 0 | Text | `GCreateText` | Renders a string using the X11 `9x15` bitmap font; supports `\n` newlines |
+| 1 | Button | `GCreateButton` | Clickable rectangle with a centered label and an `onclick` callback; switches between three packed-color states (unpressed / hover / pressed) |
+| 2 | Input | `GCreateInput` | Text input field; captures keyboard input while the mouse cursor is hovering over it; holds up to 127 characters |
+| 3 | Rect | `GCreateRect` | Filled and/or outlined rectangle drawn directly with X11 primitives |
+| 4 | Image | `GCreateImage` | Palette-indexed pixel buffer backed by an `XImage`; supports drawing primitives and sprites |
+| 5 | Checkbox | `GCreateCheckbox` | Toggleable box with an optional text label drawn to its right |
+
+## Creating Elements
+
+### Text
+
+```c
+void GCreateText(int id, int x, int y, int color, const char* text);
+```
+
+```c
+// Draw white text (palette index 15) at position (20, 40).
+// Embed \n for multi-line output.
+GCreateText(1, 20, 40, 15, "Line one\nLine two");
+```
+
+| Parameter | Description |
+|---|---|
+| `id` | Element ID — determines slot in the element array and draw order |
+| `x`, `y` | Top-left origin of the first line of text |
+| `color` | Palette index (0–15) for the text foreground |
+| `text` | Null-terminated string; `\n` advances to the next line (16 px spacing) |
+
+### Button
+
+```c
+void GCreateButton(int id, int x, int y, int w, int h,
+                   int u, int hvr, int p,
+                   const char* label, void (*onclick)(void));
+```
+
+```c
+void on_save(void) { /* handle save */ }
+
+// A 120×30 button at (50, 100).
+// u   = 0x07 → black border (0), light gray fill (7) — idle state
+// hvr = 0x0F → black border (0), white fill (15)     — mouse hover
+// p   = 0xF0 → white border (15), black fill (0)     — mouse pressed
+GCreateButton(2, 50, 100, 120, 30, 0x07, 0x0F, 0xF0, "Save", on_save);
+```
+
+| Parameter | Description |
+|---|---|
+| `id` | Element ID |
+| `x`, `y` | Top-left corner of the button rectangle |
+| `w`, `h` | Width and height in pixels |
+| `u` | Packed color byte for the idle (unpressed) state |
+| `hvr` | Packed color byte for the hover state |
+| `p` | Packed color byte for the pressed state |
+| `label` | Centered button label string |
+| `onclick` | Callback invoked on mouse button release inside the element bounds; may be `NULL` |
+
+See the [Color Palette](/concepts/color-palette) page for a full explanation of the packed color encoding used by `u`, `hvr`, and `p`.
+
+### Input
+
+```c
+void GCreateInput(int id, int x, int y, int w, int h, int u, int hvr, int max);
+```
+
+```c
+// A text field at (20, 200), auto-sized width, 30 px tall.
+// Accepts up to 32 characters.
+// u   = 0x80 → dark gray border (8), black fill (0) — inactive
+// hvr = 0x8F → dark gray border (8), white fill (15) — active
+GCreateInput(3, 20, 200, -1, 30, 0x80, 0x8F, 32);
+
+// Retrieve the current text contents:
+char* value = GGetInput(3);
+```
+
+Pass `-1` for `w` to have LWXGL calculate the width automatically based on `max`: `(max + 1) * 9 + 10` pixels. The field displays a blinking `_` cursor character while the mouse is hovering. Text is stored in a fixed 128-byte buffer; `max` is clamped to 127.
+
+### Rect
+
+```c
+void GCreateRect(int id, int x, int y, int w, int h, int fg, int bg);
+```
+
+```c
+// Outlined dark-red rectangle with a dark gray fill.
+// fg = 4 (Dark Red border), bg = 8 (Dark Gray fill)
+GCreateRect(4, 10, 10, 200, 50, 4, 8);
+
+// Filled rectangle with no border: pass -1 for fg.
+GCreateRect(5, 10, 70, 200, 50, -1, 2);
+```
+
+Pass `-1` for `fg` or `bg` to skip drawing that layer.
+
+### Image
+
+```c
+void GCreateImage(int id, int x, int y, int w, int h);
+```
+
+```c
+// A 64×64 canvas at position (300, 100).
+GCreateImage(6, 300, 100, 64, 64);
+
+// Draw into it using drawing primitives, then push to the XImage:
+unsigned char* px = GGetImageData(6);
+px[0] = 12; // top-left pixel = Light Red (index 12)
+GUpdateImage(6);
+```
+
+After modifying pixel data via `GGetImageData`, call `GUpdateImage` to sync changes into the underlying `XImage`. Only changed pixels are updated (dirty-tracked via a `prev` buffer) for efficiency.
+
+### Checkbox
+
+```c
+void GCreateCheckbox(int id, int x, int y, int size, int cb_col, int txt_col, const char* label);
+```
+
+```c
+// A 16×16 checkbox at (20, 250) with a white label.
+// cb_col  = 0xF7 → white border (15), light gray fill (7)
+// txt_col = 15   → white label text
+GCreateCheckbox(7, 20, 250, 16, 0xF7, 15, "Enable feature");
+
+// Read its state (0 = unchecked, 1 = checked):
+int checked = GGetCheckbox(7);
+```
+
+`label` may be `NULL` if no text is needed. The checked indicator is drawn as a filled inner rectangle inset 4 px from each edge of the box.
+
+## Modifying Elements
+
+To reposition or resize an existing element without destroying and recreating it, use `GElemModifyBounds`:
+
+```c
+void GElemModifyBounds(int id, int x, int y, int w, int h);
+```
+
+This updates the element's `x`, `y`, `w`, and `h` fields in-place. It works for all element types and takes effect on the next rendered frame.
+
+```c
+// Move button 2 to a new position without changing its colors or label.
+GElemModifyBounds(2, 200, 300, 120, 30);
+```
+
+<Tip>
+`GElemModifyBounds` is more efficient than recreating an element when you only need to animate position or adjust layout — it skips all allocation, font, and XImage setup.
+</Tip>
+
+## Deleting Elements
+
+```c
+void GDeleteElement(int id);
+```
+
+Frees the element at slot `id` and sets the slot to `NULL`. For image elements (type 4), `XDestroyImage` is called and the pixel data and dirty-tracking buffers are freed before the element struct itself. Calling `GDeleteElement` on an ID that is already `NULL` or out of range is a no-op.
+
+```c
+// Remove the button added earlier.
+GDeleteElement(2);
+```
+
+`GTerminateWindow` automatically calls `GDeleteElement` on every non-NULL slot before tearing down X11 resources, so manual deletion before shutdown is optional — but explicit deletion during runtime (e.g. when transitioning between screens) is good practice to avoid unbounded memory growth.

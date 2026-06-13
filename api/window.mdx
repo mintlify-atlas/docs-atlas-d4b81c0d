@@ -1,0 +1,219 @@
+---
+title: "Window API — LWXGL Window and Loop Functions"
+sidebarTitle: "Window"
+description: "Reference for LWXGL window creation, the render loop, debug overlay, and cleanup: GCreateWindow, GSimpleWindowLoop, GTerminateWindow, and related functions."
+---
+
+The Window API provides everything needed to open an X11 window, drive a frame loop, show modal dialogs, and tear down all resources on exit. Most programs call `GCreateWindow` once, register callbacks, then hand control to `GSimpleWindowLoop` — but the lower-level `GHandleWindowEvents` and `GRenderWindow` are also available for manual loop control.
+
+---
+
+### GCreateWindow
+
+```c
+int GCreateWindow(int w, int h, const char* name, int bgcol);
+```
+
+Opens an X11 display connection, allocates the 16-entry color palette, creates a fixed-size window, and sets up the back-buffer pixmap used for double-buffered rendering. The window title is set to `name`. The background color used when the window is cleared each frame is the palette index `bgcol`.
+
+<ParamField path="w" type="int">
+  Width of the window in pixels. The window manager is instructed to treat this as both the minimum and maximum width, so the window cannot be resized by the user.
+</ParamField>
+
+<ParamField path="h" type="int">
+  Height of the window in pixels. Treated as a fixed height for the same reason.
+</ParamField>
+
+<ParamField path="name" type="const char*">
+  Window title string passed to `XStoreName`. May be `NULL`-free; passed as-is to X11.
+</ParamField>
+
+<ParamField path="bgcol" type="int">
+  Palette index (0–15) used to fill the background at the start of every `GRenderWindow` call.
+</ParamField>
+
+Returns `0` on success. See the **Return Codes** table at the bottom of this page for all other values.
+
+```c
+// Open a 640×480 window with a black background
+if (GCreateWindow(640, 480, "My App", 0) != 0) {
+    fprintf(stderr, "Failed to create window\n");
+    return 1;
+}
+```
+
+---
+
+### GSimpleWindowLoop
+
+```c
+void GSimpleWindowLoop(int target_fps, void (*on_every)(int));
+```
+
+Runs the main event-render loop and blocks until `GWindowShouldClose()` returns `1`. Each frame calls `GHandleWindowEvents()`, then `GRenderWindow()`, then invokes `on_every` with the current tick counter. The loop tracks real elapsed time to maintain the requested frame rate, sleeping when ahead and skipping catch-up if more than two frames behind.
+
+<ParamField path="target_fps" type="int">
+  Desired frames per second. The frame period is computed as `1,000,000 / target_fps` microseconds.
+</ParamField>
+
+<ParamField path="on_every" type="void (*)(int)">
+  Called once per frame after events are handled and the scene is rendered. The `int` argument is the current tick count (an internal `unsigned long long` cast to `int` on each call — wraps at `INT_MAX`). May be `NULL`.
+</ParamField>
+
+<Note>
+  `GSimpleWindowLoop` enables the debug metrics collection used by the F12 overlay. If you write a manual loop, the overlay values will remain at zero.
+</Note>
+
+```c
+void on_frame(int tick) {
+    // Update game state every frame
+    if (tick % 60 == 0) {
+        // One second has elapsed at 60 fps
+    }
+}
+
+GSimpleWindowLoop(60, on_frame);
+// Execution continues here only after the window closes
+GTerminateWindow();
+```
+
+---
+
+### GHandleWindowEvents
+
+```c
+void GHandleWindowEvents(void);
+```
+
+Drains the X11 event queue, dispatching each pending event to the appropriate internal handler (expose, key press/release, button press/release, pointer motion, leave notify, client message). Returns immediately when the queue is empty.
+
+Use this function in a manual loop instead of `GSimpleWindowLoop`. It must be called at least once per frame to keep the window responsive and to update mouse/keyboard state.
+
+```c
+while (!GWindowShouldClose()) {
+    GHandleWindowEvents();
+    // custom update logic here
+    GRenderWindow();
+}
+```
+
+---
+
+### GRenderWindow
+
+```c
+void GRenderWindow(void);
+```
+
+Performs a full frame render into the back-buffer pixmap and then copies the pixmap to the visible window:
+
+1. Fills the back buffer with the `bgcol` palette color.
+2. Iterates the element list and calls the appropriate renderer for each non-NULL element.
+3. If a modal is active, draws the modal overlay on top.
+4. If the debug overlay is enabled (F12 pressed while inside `GSimpleWindowLoop`), draws the FPS/frame-time panel.
+5. Calls `XCopyArea` to blit the back buffer to the window and `XSync` to flush.
+
+Call once per frame when using a manual loop.
+
+---
+
+### GWindowShouldClose
+
+```c
+int GWindowShouldClose(void);
+```
+
+Returns `1` when the window has been flagged to close (either by the WM close button, `GDeleteWindow`, or a delete handler returning `1`). Returns `0` otherwise. Use this as the loop condition in a manual frame loop.
+
+---
+
+### GDeleteWindow
+
+```c
+void GDeleteWindow(void);
+```
+
+Triggers the close sequence. If a delete handler was registered via `GEventAttachDelete`, it is called and its return value sets the `closing` flag. If no handler is registered, `closing` is set to `1` directly. This is also called internally when the user presses Ctrl+Escape or clicks the WM close button.
+
+<Note>
+  `GDeleteWindow` does **not** free resources — it only sets the close flag. Always call `GTerminateWindow()` after the loop exits to release X11 resources.
+</Note>
+
+---
+
+### GTerminateWindow
+
+```c
+void GTerminateWindow(void);
+```
+
+Frees all resources in reverse-creation order: iterates and deletes all elements, frees the font, GC, back-buffer pixmap, stipple pixmap, palette colors, destroys the window, and closes the X11 display connection. Call this exactly once after `GSimpleWindowLoop` (or your manual loop) exits.
+
+```c
+GSimpleWindowLoop(60, on_frame);
+GTerminateWindow(); // Always call to avoid leaks
+```
+
+---
+
+### GSpawnModal
+
+```c
+void GSpawnModal(int type, const char* msg, void (*on_confirm)());
+```
+
+Displays a blocking modal dialog rendered on top of the scene. While the modal is active, keyboard callbacks, click callbacks, button clicks, and input elements are all suppressed. The modal dismisses itself when the user clicks OK (or Cancel for type `1`).
+
+<ParamField path="type" type="int">
+  `0` — OK-only dialog. `1` — OK / Cancel dialog. Clicking OK calls `on_confirm`; clicking Cancel (type `1` only) dismisses without calling `on_confirm`.
+</ParamField>
+
+<ParamField path="msg" type="const char*">
+  Message text. Supports `\n` newlines; lines are hard-wrapped at 31 characters by the renderer.
+</ParamField>
+
+<ParamField path="on_confirm" type="void (*)(void)">
+  Callback invoked when the user confirms. May be `NULL`.
+</ParamField>
+
+```c
+void on_confirm(void) {
+    printf("User clicked OK\n");
+}
+
+GSpawnModal(1, "Are you sure you want to quit?", on_confirm);
+```
+
+---
+
+### GQueryModalOpen
+
+```c
+int GQueryModalOpen(void);
+```
+
+Returns `1` if a modal dialog is currently active and being displayed, `0` otherwise. Useful for suppressing application-side input processing while a modal is open.
+
+---
+
+### GRedrawAllImages
+
+```c
+void GRedrawAllImages(void);
+```
+
+Iterates every element slot and, for each image element (type `4`), invalidates its shadow buffer by setting all bytes to `255` and calls `GUpdateImage` to force a complete pixel-by-pixel repaint. Called automatically by `GPaletteModify` (when `redraw != 0`) and `GPaletteReset`. You can also call it manually if you need to force all image canvases to re-render after a bulk palette change.
+
+---
+
+## Return Codes
+
+The following codes are returned by `GCreateWindow`:
+
+| Code | Meaning |
+|------|---------|
+| `0`  | Success — window created and ready. |
+| `1`  | No X11 display found (`XOpenDisplay` returned `NULL`). Check that `$DISPLAY` is set. |
+| `2`  | The `9x15` bitmap font could not be loaded. The font must be available in the X server's font path. |
+| `3`  | A window already exists. `GCreateWindow` cannot be called twice in the same process without calling `GTerminateWindow` first. |
+| `127 + i` | Color allocation failed for palette entry `i` (rare; indicates the X server colormap is full). |

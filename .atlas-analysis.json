@@ -1,0 +1,119 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "LWXGL",
+  "projectDescription": "A lightweight C/C++ shared library for building X11 GUI applications with windows, UI elements, image canvases, and event handling.",
+  "theme": "aspen",
+  "primaryColor": "#3B7DD8",
+  "lightColor": "#5A9AF0",
+  "darkColor": "#1E4FA0",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "building-and-installing"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/window-lifecycle",
+              "concepts/color-palette",
+              "concepts/element-system"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/ui-elements",
+              "guides/image-canvas",
+              "guides/event-handling",
+              "guides/modals"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Window",
+            "pages": [
+              "api/window"
+            ]
+          },
+          {
+            "group": "Elements",
+            "pages": [
+              "api/elements",
+              "api/primitives"
+            ]
+          },
+          {
+            "group": "Events & Input",
+            "pages": [
+              "api/events",
+              "api/palette"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Single-header C API usable from C and C++",
+    "Fixed 16-color palette with runtime modification",
+    "Built-in UI elements: text, buttons, inputs, rectangles, images, checkboxes",
+    "Image canvas with palette-indexed pixels and RLE sprite rendering",
+    "Event callbacks for keyboard, mouse clicks, and window close",
+    "Simple fixed-FPS game/app loop via GSimpleWindowLoop",
+    "Modal dialogs (OK and OK/Cancel)",
+    "Double-buffered rendering via X11 Pixmap for flicker-free display",
+    "Debug overlay showing frame time and FPS (toggle with F12)",
+    "Builds as a shared library (.so) with a minimal install"
+  ],
+  "publicApiSurface": [
+    "GCreateWindow(int w, int h, const char* name, int bgcol)",
+    "GTerminateWindow()",
+    "GWindowShouldClose()",
+    "GHandleWindowEvents()",
+    "GRenderWindow()",
+    "GSimpleWindowLoop(int target_fps, void (*on_every)(int))",
+    "GDeleteWindow()",
+    "GCreateText(int id, int x, int y, int color, const char* text)",
+    "GCreateButton(int id, int x, int y, int w, int h, int u, int hvr, int p, const char* label, void (*onclick)(void))",
+    "GCreateInput(int id, int x, int y, int w, int h, int u, int hvr, int max)",
+    "GGetInput(int id)",
+    "GCreateRect(int id, int x, int y, int w, int h, int fg, int bg)",
+    "GCreateImage(int id, int x, int y, int w, int h)",
+    "GGetImageData(int id)",
+    "GUpdateImage(int id)",
+    "GClearImage(int id, int c)",
+    "GCreateCheckbox(int id, int x, int y, int size, int cb_col, int txt_col, const char* label)",
+    "GGetCheckbox(int id)",
+    "GDeleteElement(int index)",
+    "GElemModifyBounds(int id, int x, int y, int w, int h)",
+    "GPrimitiveRect(int id, int x, int y, int w, int h, int fg, int bg)",
+    "GPrimitiveCircle(int id, int cx, int cy, int r, int fg, int bg)",
+    "GPrimitiveLine(int id, int x1, int y1, int x2, int y2, int color)",
+    "GPrimitiveSprite(int id, int sx, int sy, int color, const char* sprite, int scale)",
+    "GEventAttachKey(void (*Key)(int key))",
+    "GEventAttachClick(void (*Click)(int x, int y, int btn))",
+    "GEventAttachDelete(int (*on_exit)())",
+    "GQueryMouse(int* x, int* y, int* btn)",
+    "GQueryKeyboard()",
+    "GQueryKeyDown(int ch)",
+    "GSpawnModal(int type, const char* msg, void (*on_confirm)())",
+    "GQueryModalOpen()",
+    "GPaletteQuery(int idx, unsigned char* r, unsigned char* g, unsigned char* b)",
+    "GPaletteModify(int idx, unsigned char r, unsigned char g, unsigned char b, int redraw)",
+    "GPaletteReset()",
+    "GRedrawAllImages()",
+    "LWXGL_KEY_LEFT, LWXGL_KEY_RIGHT, LWXGL_KEY_UP, LWXGL_KEY_DOWN, LWXGL_KEY_FN"
+  ]
+}

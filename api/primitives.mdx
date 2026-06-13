@@ -1,0 +1,251 @@
+---
+title: "Primitives API — Drawing into LWXGL Image Canvases"
+sidebarTitle: "Primitives"
+description: "Reference for LWXGL drawing primitives — GPrimitiveRect, GPrimitiveCircle, GPrimitiveLine, GPrimitiveSprite — that render into image element pixel buffers."
+---
+
+Drawing primitives let you paint geometric shapes and sprite graphics directly into an image element's palette-indexed pixel buffer. All coordinates passed to primitives are **canvas-relative** — `(0, 0)` is the top-left corner of the image element, not the window. Pixels outside the canvas bounds are silently clipped.
+
+<Note>
+  Primitives write to `img->data` (the palette-indexed pixel buffer) but do **not** automatically call `GUpdateImage`. You must call `GUpdateImage(id)` after one or more primitive draws to propagate changes to the underlying `XImage` and have them appear on screen.
+</Note>
+
+---
+
+### GPrimitiveRect
+
+```c
+void GPrimitiveRect(int id, int x, int y, int w, int h, int fg, int bg);
+```
+
+Draws a rectangle into the pixel buffer of image element `id`. The left and right edges and the top and bottom rows are drawn with the border color `fg`; interior pixels are filled with `bg`.
+
+<ParamField path="id" type="int">
+  ID of an existing image element to draw into.
+</ParamField>
+
+<ParamField path="x" type="int">
+  Left edge of the rectangle relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="y" type="int">
+  Top edge of the rectangle relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="w" type="int">
+  Width of the rectangle in pixels.
+</ParamField>
+
+<ParamField path="h" type="int">
+  Height of the rectangle in pixels.
+</ParamField>
+
+<ParamField path="fg" type="int">
+  Palette index for the border/outline. Pass `-1` to skip drawing the outline (the `bg` color is used for all pixels in that case, because the implementation substitutes `fg = bg` when `fg == -1`).
+</ParamField>
+
+<ParamField path="bg" type="int">
+  Palette index for the fill. Pass `-1` to leave interior pixels unchanged (transparent fill).
+</ParamField>
+
+```c
+GCreateImage(0, 0, 0, 200, 200);
+
+// Solid white-bordered, black-filled rectangle
+GPrimitiveRect(0, 10, 10, 80, 40, 15, 0);
+
+// Border-only rectangle (no fill)
+GPrimitiveRect(0, 100, 10, 80, 40, 15, -1);
+
+// Filled rectangle with no visible border
+GPrimitiveRect(0, 10, 60, 80, 40, -1, 2);
+
+GUpdateImage(0);
+```
+
+---
+
+### GPrimitiveCircle
+
+```c
+void GPrimitiveCircle(int id, int cx, int cy, int r, int fg, int bg);
+```
+
+Draws a circle into the pixel buffer of image element `id`. The circle is rasterized by iterating a bounding box and testing each pixel's distance from the center. Border pixels are those whose squared distance falls within `[(r-1)², r²]`; fill pixels are everything inside `r²`.
+
+<ParamField path="id" type="int">
+  ID of an existing image element.
+</ParamField>
+
+<ParamField path="cx" type="int">
+  X coordinate of the circle center, relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="cy" type="int">
+  Y coordinate of the circle center, relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="r" type="int">
+  Radius in pixels.
+</ParamField>
+
+<ParamField path="fg" type="int">
+  Palette index for the 1-pixel-wide border ring. Pass `-1` to skip drawing the border.
+</ParamField>
+
+<ParamField path="bg" type="int">
+  Palette index for the filled interior. Pass `-1` to leave interior pixels unchanged. When both `fg` and `bg` are set, the border takes priority over the fill for border pixels.
+</ParamField>
+
+```c
+GCreateImage(1, 0, 0, 100, 100);
+
+// Filled circle: red border (4), dark-green fill (2)
+GPrimitiveCircle(1, 50, 50, 30, 4, 2);
+
+// Ring only — no fill
+GPrimitiveCircle(1, 50, 50, 20, 15, -1);
+
+GUpdateImage(1);
+```
+
+---
+
+### GPrimitiveLine
+
+```c
+void GPrimitiveLine(int id, int x1, int y1, int x2, int y2, int color);
+```
+
+Draws a single-pixel-wide line from `(x1, y1)` to `(x2, y2)` using linear float stepping (not Bresenham). The number of steps equals `max(|dx|, |dy|)`, with floating-point increments along each axis rounded to the nearest integer per step. Pixels outside the canvas are silently skipped.
+
+<ParamField path="id" type="int">
+  ID of an existing image element.
+</ParamField>
+
+<ParamField path="x1" type="int">
+  X coordinate of the line start, relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="y1" type="int">
+  Y coordinate of the line start, relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="x2" type="int">
+  X coordinate of the line end, relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="y2" type="int">
+  Y coordinate of the line end, relative to the canvas top-left.
+</ParamField>
+
+<ParamField path="color" type="int">
+  Palette index for the line pixels.
+</ParamField>
+
+```c
+GCreateImage(2, 0, 0, 200, 200);
+
+// Diagonal white line across the canvas
+GPrimitiveLine(2, 0, 0, 199, 199, 15);
+
+// Horizontal yellow line
+GPrimitiveLine(2, 0, 100, 199, 100, 14);
+
+GUpdateImage(2);
+```
+
+---
+
+### GPrimitiveSprite
+
+```c
+void GPrimitiveSprite(int id, int sx, int sy, int color,
+                      const char* sprite, int scale);
+```
+
+Renders a run-length encoded sprite string into the pixel buffer of image element `id`. The sprite is decoded character by character; filled pixels use the `color` palette index, transparent pixels use palette index `0`. Each logical pixel is rendered as a `scale × scale` block of physical pixels.
+
+<ParamField path="id" type="int">
+  ID of an existing image element.
+</ParamField>
+
+<ParamField path="sx" type="int">
+  X coordinate of the sprite's top-left corner in canvas coordinates.
+</ParamField>
+
+<ParamField path="sy" type="int">
+  Y coordinate of the sprite's top-left corner in canvas coordinates.
+</ParamField>
+
+<ParamField path="color" type="int">
+  Palette index used for all filled (`#`) pixels in the sprite.
+</ParamField>
+
+<ParamField path="sprite" type="const char*">
+  RLE sprite string. See the **RLE Sprite Format** section below for the encoding rules.
+</ParamField>
+
+<ParamField path="scale" type="int">
+  Integer pixel scale factor. `1` renders each logical pixel as one physical pixel. `2` renders each logical pixel as a 2×2 block, effectively doubling the sprite size. `3` triples it, and so on.
+</ParamField>
+
+```c
+GCreateImage(3, 50, 50, 64, 64);
+
+// Small arrow sprite at (4,4), palette index 15 (white), 2× scale
+GPrimitiveSprite(3, 4, 4, 15, ".#...$##...$###..$##...$,#...!",  2);
+
+GUpdateImage(3);
+```
+
+---
+
+## RLE Sprite Format
+
+Sprites are described by compact run-length encoded strings. The decoder processes the string left to right, advancing an internal cursor that starts at `(sx, sy)` and moves right as pixels are placed.
+
+| Token | Meaning |
+|-------|---------|
+| `#` | Filled pixel — writes `color` at the cursor, then advances cursor right by `scale`. |
+| `.` | Transparent pixel — writes palette index `0` at the cursor, then advances cursor right by `scale`. |
+| `$` | Newline — resets X to `sx`, advances Y down by `scale` (multiplied by an optional count). |
+| `>` | Skip right — advances cursor right by `scale` pixels (without writing), multiplied by an optional count. |
+| `0`–`9` | Numeric prefix — sets a repeat count for the immediately following token or group. `5#` places 5 filled pixels. |
+| `[...]` | Group — the content between brackets is treated as a repeatable sub-sequence. Prefix with a number to repeat: `3[#.]` expands to `#.#.#.`. |
+| `!` | End of sprite — stops decoding immediately. |
+
+<Tip>
+  Numeric prefixes stack by decimal digit: `12#` repeats `#` twelve times.
+</Tip>
+
+### 5×5 checkerboard
+
+```c
+// "#." alternating × 3 = "#.#.#", skip 3× to next row, repeat 5 rows
+// Odd rows start with "." to offset the pattern
+const char* checker =
+    "3[#.]$"
+    "3[.#]$"
+    "3[#.]$"
+    "3[.#]$"
+    "3[#.]!";
+
+GPrimitiveSprite(3, 0, 0, 15, checker, 4); // 4× scale → 20×20 px
+GUpdateImage(3);
+```
+
+### Diamond / cross sprite
+
+```c
+// 5×5 diamond using skip and newline tokens
+const char* diamond =
+    "2>.$ "   // row 0: skip 2, filled, skip
+    ">###$"   // row 1: skip 1, 3 filled
+    "#####$"  // row 2: 5 filled
+    ">###$"   // row 3: skip 1, 3 filled
+    "2>.!";   // row 4: skip 2, filled
+
+GPrimitiveSprite(3, 5, 5, 4, diamond, 2); // Dark Red, 2× scale
+GUpdateImage(3);
+```

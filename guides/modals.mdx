@@ -1,0 +1,108 @@
+---
+title: "Modal Dialogs in LWXGL"
+sidebarTitle: "Modals"
+description: "Display blocking OK or OK/Cancel modal dialogs in LWXGL using GSpawnModal, and check whether a modal is open with GQueryModalOpen."
+---
+
+LWXGL supports a single modal dialog overlay that is rendered on top of all other elements. While a modal is open the event system returns early from button and input handling — clicks on buttons and keystrokes into input fields are suppressed — so the modal acts as a true blocking layer. Two types are supported: OK-only (type `0`) and OK/Cancel (type `1`).
+
+---
+
+## Spawning a Modal
+
+```c
+void GSpawnModal(int type, const char* msg, void (*on_confirm)(void));
+```
+
+Displays a modal dialog with the given message and an optional confirmation callback.
+
+| Parameter | Description |
+|-----------|-------------|
+| `type` | `0` for an OK-only dialog; `1` for an OK/Cancel dialog. |
+| `msg` | Message text displayed inside the dialog. Supports `\n` for explicit line breaks. Lines are also soft-wrapped at approximately 31 characters. |
+| `on_confirm` | Called when the user clicks **OK**. Pass `NULL` if no action is needed on confirm. |
+
+Clicking **Cancel** (type `1` only) dismisses the modal without calling `on_confirm`.
+
+### Example — save confirmation dialog
+
+```c
+#include <stdio.h>
+#include "libLWXGL.h"
+
+void do_save(void) {
+    printf("Saving...\n");
+    // perform save logic here
+}
+
+void on_save_click(void) {
+    GSpawnModal(1, "Save changes before closing?", do_save);
+}
+
+// In setup:
+GCreateButton(0, 20, 20, 140, 30, 0x78, 0x87, 0x00, "Save & Close", on_save_click);
+```
+
+---
+
+## Checking Modal State
+
+```c
+int GQueryModalOpen(void);
+```
+
+Returns `1` if a modal is currently visible, `0` otherwise. This is useful in event handlers and frame callbacks to avoid triggering secondary actions while the user is interacting with a dialog.
+
+### Example — guard a button callback
+
+```c
+void on_dangerous_action(void) {
+    // Prevent re-entry if a modal is already open
+    if (GQueryModalOpen()) return;
+
+    GSpawnModal(1, "This cannot be undone.\nAre you sure?", perform_action);
+}
+```
+
+You can also use `GQueryModalOpen` inside the per-frame callback to pause game logic, hide animated overlays, or prevent canvas updates while the modal is on screen:
+
+```c
+void on_frame(int tick) {
+    if (GQueryModalOpen()) return; // pause simulation while modal is shown
+
+    update_simulation(tick);
+    GClearImage(0, 0);
+    draw_frame(tick);
+    GUpdateImage(0);
+}
+```
+
+---
+
+## Modal Appearance
+
+The modal is rendered by the internal `DrawActiveModal` function as a centered **306 × 156 px** box with a black fill and a one-pixel white border. Message text is drawn in white starting near the top of the box, left-aligned with a small margin.
+
+- The **OK** label is rendered in green (palette index 10) near the bottom-right of the dialog.
+- The **Cancel** label (type `1` only) is rendered in red (palette index 12) to the left of OK.
+
+Hit-testing for the buttons is performed against fixed pixel regions relative to the horizontal center of the window, so the dialog always appears centered regardless of window width.
+
+<Warning>
+  Only one modal can be active at a time. Calling `GSpawnModal` while another modal is already open immediately **replaces** it — the previous message and `on_confirm` callback are discarded with no notification.
+</Warning>
+
+<Tip>
+  A common pattern is to use `GSpawnModal` inside a `GEventAttachDelete` handler to show a confirmation prompt before allowing the window to close. Pass `GDeleteWindow` as `on_confirm` so that clicking OK actually closes the application:
+
+  ```c
+  int on_close(void) {
+      if (!GQueryModalOpen()) {
+          GSpawnModal(1, "Quit the application?", GDeleteWindow);
+      }
+      return 0; // cancel the close, let modal handle it
+  }
+  ```
+
+  Returning `0` from the delete handler keeps the window alive. If the user clicks OK in the modal, `GDeleteWindow` is called directly, setting the close flag and exiting the main loop cleanly.
+</Tip>

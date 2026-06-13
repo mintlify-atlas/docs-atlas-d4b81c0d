@@ -1,0 +1,87 @@
+---
+title: "Build and Install LWXGL from Source"
+sidebarTitle: "Installation"
+description: "Compile libLWXGL.so with g++ and install the shared library and header to /usr/local using the provided Makefile."
+---
+
+LWXGL ships as a single Makefile project with no generated build system or external dependency manager. Running `make build` in the repository root invokes `g++` with `-fPIC -shared` to produce `libLWXGL.so`. Running `make install` (as root) copies the shared object to `/usr/local/lib` and the public header `libLWXGL.h` to `/usr/local/include`, then calls `ldconfig` to register the library with the dynamic linker. The entire install footprint is two files.
+
+## Prerequisites
+
+Make sure the following are present on your system before building:
+
+- **`g++`** — the GNU C++ compiler (the library source is C++ internally, even though it exposes a C API)
+- **`libx11-dev`** — X11 client-library development headers (`X11/Xlib.h`, `X11/Xutil.h`, `X11/XKBlib.h`)
+- **`make`** — GNU Make to drive the provided Makefile
+- **An X11 display server** — required at runtime; not needed to compile the library itself
+
+On Debian/Ubuntu these can be installed with:
+
+```bash
+sudo apt-get install g++ libx11-dev make
+```
+
+## Makefile Targets
+
+The Makefile defines exactly two targets:
+
+```makefile
+.PHONY: build install
+
+build:
+	g++ -fPIC -shared -O2 -o libLWXGL.so src/main.cc -lX11 -fvisibility=hidden
+
+install:
+	sudo cp libLWXGL.so /usr/local/lib
+	sudo cp src/libLWXGL.h /usr/local/include
+	sudo ldconfig
+```
+
+**`make build`** compiles `src/main.cc` (which `#include`s the remaining `.cc` source files as translation-unit includes) into a position-independent shared object at `libLWXGL.so` in the repository root. The `-fvisibility=hidden` flag ensures that only symbols explicitly marked with `__attribute__((visibility("default")))` — every `G`-prefixed API function — are exported; all internal symbols remain hidden.
+
+**`make install`** copies the compiled library and header to their system destinations and runs `ldconfig` so the dynamic linker cache is updated immediately. This target embeds `sudo` in its recipe, so you will be prompted for your password when invoking it directly with `make install`.
+
+<Warning>
+  `make install` writes to `/usr/local/lib` and `/usr/local/include`, which are owned by root on most Linux systems. You must have `sudo` privileges to complete the install step. If you prefer not to install system-wide, you can point the compiler at the repository directory using `-L` and `-I` flags and set `LD_LIBRARY_PATH` at runtime — see [Linking Your Project](#linking-your-project) below.
+</Warning>
+
+## Full Build and Install Sequence
+
+```bash
+git clone https://github.com/Dressedalarm184/lwxgl.git
+cd lwxgl
+make build
+sudo make install
+```
+
+After `sudo make install` completes, `ldconfig` will have registered `/usr/local/lib/libLWXGL.so` and any program linked with `-lLWXGL` will resolve the library at runtime without further configuration.
+
+## Linking Your Project
+
+Once LWXGL is installed, compile any C or C++ source file against it by adding `-lLWXGL -lX11` to your compiler invocation:
+
+```bash
+# C
+gcc -o myapp myapp.c -lLWXGL -lX11
+
+# C++
+g++ -o myapp myapp.cpp -lLWXGL -lX11
+```
+
+No `-I` or `-L` flags are needed when the library was installed to the standard `/usr/local` prefix, because both `gcc` and `g++` search `/usr/local/include` for headers and `/usr/local/lib` for libraries by default.
+
+<Note>
+  `libLWXGL.h` wraps all of its declarations in an `extern "C"` block guarded by `#ifdef __cplusplus`. This means the header is safe to `#include` from both C and C++ translation units without any name-mangling issues. You do not need a separate C++ wrapper — just `#include <libLWXGL.h>` directly in `.c` and `.cpp` files alike.
+</Note>
+
+## Uninstalling
+
+LWXGL does not provide an `uninstall` Makefile target. To remove it manually, delete the two installed files and refresh the linker cache:
+
+```bash
+sudo rm /usr/local/lib/libLWXGL.so
+sudo rm /usr/local/include/libLWXGL.h
+sudo ldconfig
+```
+
+After running these commands the library will no longer be discoverable by the dynamic linker, and any previously compiled binaries that depend on it will fail to start until they are relinked or LWXGL is reinstalled.

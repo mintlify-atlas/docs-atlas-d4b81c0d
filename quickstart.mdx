@@ -1,47 +1,97 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with LWXGL in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Open an X11 window with LWXGL, add a button and a text label, and run a fixed-FPS loop — all in under 30 lines of C."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide walks you through building a minimal LWXGL application: a 400×300 window containing a text label and a button. When the button is clicked the label text updates in place — no rebuild required, just a live in-process element swap. By the end you will have a working binary that runs at 60 FPS using LWXGL's built-in frame-capped loop.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Install LWXGL">
+    Clone the repository and run the two Makefile targets to compile and install the shared library:
 
     ```bash
-    npm install your-package
+    git clone https://github.com/Dressedalarm184/lwxgl.git
+    cd lwxgl
+    make build
+    sudo make install
+    ```
+
+    `make build` compiles `libLWXGL.so` in the repository root. `make install` copies it to `/usr/local/lib`, copies `src/libLWXGL.h` to `/usr/local/include`, and runs `ldconfig` so the dynamic linker picks up the new library immediately. See [Build and Install LWXGL from Source](/building-and-installing) for full details.
+  </Step>
+
+  <Step title="Create your source file">
+    Create a file called `hello.c` with the following contents:
+
+    ```c
+    #include <libLWXGL.h>
+
+    void on_click(void) {
+        /* Replace the label text with a confirmation message.
+           Color index 10 = Light Green in the default palette. */
+        GCreateText(0, 20, 20, 10, "Button clicked!");
+    }
+
+    int main(void) {
+        /* Open a 400x300 window. Background color index 0 = Black. */
+        GCreateWindow(400, 300, "Hello LWXGL", 0);
+
+        /* Create a text label at element ID 0.
+           Position (20, 20), color index 15 = White. */
+        GCreateText(0, 20, 20, 15, "Click the button!");
+
+        /* Create a button at element ID 1.
+           Position (150, 120), size 100x30.
+           0x87 -> normal state: H=8 border (Dark Gray), L=7 fill (Light Gray)
+           0x98 -> hover  state: H=9 border (Light Blue), L=8 fill (Dark Gray)
+           0x97 -> pressed state: H=9 border (Light Blue), L=7 fill (Light Gray) */
+        GCreateButton(1, 150, 120, 100, 30, 0x87, 0x98, 0x97, "Click me", on_click);
+
+        /* Run the event/render loop at 60 FPS. Pass NULL for no per-frame callback. */
+        GSimpleWindowLoop(60, NULL);
+
+        /* Clean up all elements and close the X11 connection. */
+        GTerminateWindow();
+        return 0;
+    }
+    ```
+
+    The program creates two elements — ID `0` (text) and ID `1` (button) — before entering the loop. `on_click` calls `GCreateText` again with the same ID `0`, which replaces the existing label in-place.
+  </Step>
+
+  <Step title="Compile">
+    Link against both `libLWXGL` and `libX11`:
+
+    ```bash
+    gcc -o hello hello.c -lLWXGL -lX11
+    ```
+
+    Because `make install` ran `ldconfig`, the linker can resolve `-lLWXGL` without any extra `-L` flags. If you skipped the install step you can point the linker at the repository directory directly:
+
+    ```bash
+    gcc -o hello hello.c -L/path/to/lwxgl -lLWXGL -lX11 -Wl,-rpath,/path/to/lwxgl
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Run">
+    Launch the compiled binary:
 
     ```bash
-    your-cli init
+    ./hello
     ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
 
-    ```bash
-    your-cli start
-    ```
+    A 400×300 window titled **Hello LWXGL** will appear. Click the **Click me** button and watch the label change from white "Click the button!" to green "Button clicked!". Close the window normally — the WM close event is handled by LWXGL and exits the loop cleanly.
+
+    > **Tip:** Press <kbd>F12</kbd> while the window is open to toggle the built-in debug overlay, which displays live FPS and average per-frame work time.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+<Note>
+  Color parameters throughout the LWXGL API are palette indices in the range `0`–`15`, not RGB values. The default 16-color palette is fixed at startup and maps to CGA-style colors (0 = Black, 7 = Light Gray, 10 = Light Green, 15 = White, and so on).
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  For functions that take a packed color byte — such as the `u`, `hvr`, and `p` arguments of `GCreateButton` — each byte encodes **two** palette indices: the high nibble (bits 7–4, extracted with the `H(byte)` macro defined in `main.cc`) carries one color and the low nibble (bits 3–0, extracted with `L(byte)`) carries the other. For example, `0x87` means high nibble `8` (Dark Gray) and low nibble `7` (Light Gray).
+</Note>
+
+<Tip>
+  `GCreateButton` is just one of six element types LWXGL provides. See [UI Elements](/guides/ui-elements) for a full reference covering text labels, single-line inputs, rectangles, image canvases, and checkboxes — including how to read input values with `GGetInput` and query checkbox state with `GGetCheckbox`.
 </Tip>

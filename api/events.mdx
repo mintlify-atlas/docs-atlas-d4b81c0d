@@ -1,0 +1,204 @@
+---
+title: "Events API — Input and Callback Functions"
+sidebarTitle: "Events"
+description: "Reference for LWXGL event attachment and polling functions: keyboard callbacks, mouse queries, click handlers, and the window-close hook."
+---
+
+The Events API lets your application respond to keyboard input, mouse clicks, and window close requests. LWXGL processes all X11 events internally each frame during `GHandleWindowEvents`. User-registered callbacks are invoked after LWXGL's own internal handlers have had a chance to consume the event — some inputs (Ctrl+Escape and F12) are always consumed before reaching your callback.
+
+<Note>
+  **Ctrl+Escape** always triggers `GDeleteWindow()` and **F12** always toggles the debug overlay. These are handled unconditionally inside the key event handler before the user's key callback is ever invoked.
+</Note>
+
+---
+
+### GEventAttachKey
+
+```c
+void GEventAttachKey(void (*Key)(int key));
+```
+
+Registers a global keyboard callback. The callback receives one argument: an `int` representing the key that was pressed. For printable ASCII characters the value is the character code (e.g., `'a'` = 97). For special keys the value is one of the `LWXGL_KEY_*` constants defined in `libLWXGL.h`.
+
+<ParamField path="Key" type="void (*)(int key)">
+  Function to call on key press. Receives the ASCII value for printable characters or an `LWXGL_KEY_*` constant for special keys. Pass `NULL` to unregister the callback.
+</ParamField>
+
+The callback is **not** called when:
+- A modal dialog is open (`GQueryModalOpen()` returns `1`).
+- The key event was consumed by an input element (the cursor was inside an active input field).
+- The key was Ctrl+Escape or F12 (consumed before user callback).
+
+```c
+void on_key(int key) {
+    if (key == LWXGL_KEY_LEFT)  { player_x--; }
+    if (key == LWXGL_KEY_RIGHT) { player_x++; }
+    if (key == LWXGL_KEY_UP)    { player_y--; }
+    if (key == LWXGL_KEY_DOWN)  { player_y++; }
+    if (key == 'q') GDeleteWindow();
+}
+
+GEventAttachKey(on_key);
+```
+
+---
+
+### GEventAttachClick
+
+```c
+void GEventAttachClick(void (*Click)(int x, int y, int btn));
+```
+
+Registers a global mouse click callback. The callback receives the cursor position at the time of the button release and the X11 button number.
+
+<ParamField path="Click" type="void (*)(int x, int y, int btn)">
+  Function to call when a mouse button is released. `x` and `y` are window coordinates; `btn` is the X11 button number (`1` = left, `2` = middle, `3` = right). Pass `NULL` to unregister.
+</ParamField>
+
+The callback is **not** called when:
+- The click was consumed by a button element (released inside a button's bounds).
+- The click was consumed by a checkbox element (released inside a checkbox's bounds).
+- A modal dialog is open.
+
+```c
+void on_click(int x, int y, int btn) {
+    if (btn == 1) {
+        printf("Left click at (%d, %d)\n", x, y);
+    }
+}
+
+GEventAttachClick(on_click);
+```
+
+---
+
+### GEventAttachDelete
+
+```c
+void GEventAttachDelete(int (*on_exit)());
+```
+
+Registers a window close handler that is called when `GDeleteWindow()` is triggered (e.g., by the WM close button or Ctrl+Escape). The handler's return value controls whether the close actually proceeds.
+
+<ParamField path="on_exit" type="int (*)(void)">
+  Function to call when the window is about to close. Return `1` to allow the close (sets `closing = 1`). Return `0` to cancel the close (the window remains open). Pass `NULL` to unregister, which makes every close attempt succeed unconditionally.
+</ParamField>
+
+```c
+int on_delete(void) {
+    if (has_unsaved_changes) {
+        GSpawnModal(1, "Unsaved changes.\nQuit anyway?", confirm_quit);
+        return 0; // Cancel close — let the modal handle it
+    }
+    return 1; // Allow close
+}
+
+GEventAttachDelete(on_delete);
+```
+
+---
+
+### GQueryMouse
+
+```c
+void GQueryMouse(int* x, int* y, int* btn);
+```
+
+Writes the current mouse state to the output pointers. Values are updated continuously by the `MotionNotify` and `ButtonPress`/`ButtonRelease` X11 event handlers and reflect the state as of the most recent `GHandleWindowEvents` call.
+
+<ParamField path="x" type="int*">
+  Receives the cursor's X position in window coordinates, or `-1` if the cursor is outside the window.
+</ParamField>
+
+<ParamField path="y" type="int*">
+  Receives the cursor's Y position in window coordinates, or `-1` if the cursor is outside the window.
+</ParamField>
+
+<ParamField path="btn" type="int*">
+  Receives the button currently held down (`1`=left, `2`=middle, `3`=right), or `0` if no button is pressed.
+</ParamField>
+
+```c
+int mx, my, mb;
+GQueryMouse(&mx, &my, &mb);
+
+if (mx != -1 && mb == 1) {
+    printf("Dragging at (%d, %d)\n", mx, my);
+}
+```
+
+---
+
+### GQueryKeyboard
+
+```c
+unsigned char* GQueryKeyboard(void);
+```
+
+Returns a pointer to an 8-byte array of currently held key codes. Each non-zero byte contains the character code (printable ASCII or `LWXGL_KEY_*` constant) of one currently depressed key. Up to 8 simultaneous key presses are tracked. Zero bytes indicate empty slots.
+
+<ParamField path="(none)" type="">
+  Takes no parameters.
+</ParamField>
+
+The returned pointer is valid for the lifetime of the window. Do not free it.
+
+```c
+unsigned char* keys = GQueryKeyboard();
+// Check all 8 slots
+for (int i = 0; i < 8; i++) {
+    if (keys[i] != 0) {
+        printf("Key held: %d\n", keys[i]);
+    }
+}
+```
+
+---
+
+### GQueryKeyDown
+
+```c
+int GQueryKeyDown(int ch);
+```
+
+Returns `1` if the key with code `ch` is currently held down, `0` otherwise. Internally scans the same 8-byte array returned by `GQueryKeyboard`.
+
+<ParamField path="ch" type="int">
+  ASCII character code or `LWXGL_KEY_*` constant to query.
+</ParamField>
+
+```c
+void on_frame(int tick) {
+    if (GQueryKeyDown(LWXGL_KEY_LEFT))  move_left();
+    if (GQueryKeyDown(LWXGL_KEY_RIGHT)) move_right();
+    if (GQueryKeyDown(' '))             fire();
+}
+```
+
+---
+
+## Key Constants
+
+The following constants are defined in `libLWXGL.h` for non-printable keys:
+
+| Constant | Value | Key |
+|---|---|---|
+| `LWXGL_KEY_LEFT` | `170` | Left arrow |
+| `LWXGL_KEY_RIGHT` | `171` | Right arrow |
+| `LWXGL_KEY_UP` | `172` | Up arrow |
+| `LWXGL_KEY_DOWN` | `173` | Down arrow |
+| `LWXGL_KEY_FN` | `150` | Function key base (see below) |
+
+Function keys F1–F12 are encoded as `LWXGL_KEY_FN + n`, where `n` is the function key number (1–12):
+
+| Key | Value |
+|---|---|
+| F1 | `151` |
+| F2 | `152` |
+| … | … |
+| F11 | `161` |
+| F12 | `162` |
+
+<Note>
+  F12 (`LWXGL_KEY_FN + 12` = `162`) is consumed by the internal event handler to toggle the debug overlay and never reaches your key callback.
+</Note>

@@ -1,0 +1,195 @@
+---
+title: "Handling Events in LWXGL Applications"
+sidebarTitle: "Event Handling"
+description: "Attach callbacks for keyboard, mouse, and window-close events in LWXGL, and use polling APIs to query current input state from within your render loop."
+---
+
+LWXGL processes X11 events inside `GHandleWindowEvents`, which is called automatically on every frame by `GSimpleWindowLoop`. You register callback functions for the events you care about — keyboard presses, mouse clicks, and window-close requests. Polling APIs let you query the current mouse position and which keys are held at any point during your frame callback, without needing to install a persistent handler.
+
+---
+
+## Keyboard Events
+
+```c
+void GEventAttachKey(void (*Key)(int key));
+```
+
+Registers a callback that is invoked each time a key is pressed. The `key` argument is the ASCII character code for printable keys, or one of the `LWXGL_KEY_*` constants for special keys.
+
+### Special key constants
+
+| Constant | Value | Key |
+|----------|-------|-----|
+| `LWXGL_KEY_LEFT` | 170 | ← Arrow |
+| `LWXGL_KEY_RIGHT` | 171 | → Arrow |
+| `LWXGL_KEY_UP` | 172 | ↑ Arrow |
+| `LWXGL_KEY_DOWN` | 173 | ↓ Arrow |
+| `LWXGL_KEY_FN` | 150 | Base offset for function keys |
+
+Function keys are offset from `LWXGL_KEY_FN`: F1 = 151, F2 = 152, … F12 = 162.
+
+### Reserved key combinations
+
+Two key combinations are handled by LWXGL **before** your callback is invoked:
+
+- **Ctrl+Escape** — immediately closes the window (`GDeleteWindow`).
+- **F12** — toggles the debug overlay (FPS and frame-time display). The user callback is **not** called for this key.
+
+Keystrokes are also intercepted by input elements: if the cursor is inside an input element when a key is pressed, the character is appended to that element's buffer and your callback is **not** called. Only when no input element is active does the event reach your handler.
+
+### Example — WASD movement callback
+
+```c
+#include "libLWXGL.h"
+
+static int player_x = 100, player_y = 100;
+
+void on_key(int key) {
+    int speed = 4;
+    if (key == 'w' || key == LWXGL_KEY_UP)    player_y -= speed;
+    if (key == 's' || key == LWXGL_KEY_DOWN)   player_y += speed;
+    if (key == 'a' || key == LWXGL_KEY_LEFT)   player_x -= speed;
+    if (key == 'd' || key == LWXGL_KEY_RIGHT)  player_x += speed;
+}
+
+int main(void) {
+    GCreateWindow(640, 480, "Demo", 0);
+    GEventAttachKey(on_key);
+    GSimpleWindowLoop(60, NULL);
+    GTerminateWindow();
+    return 0;
+}
+```
+
+---
+
+## Keyboard Polling
+
+For smooth movement and other frame-rate-coupled logic it is often more convenient to query which keys are currently held rather than responding to discrete press events.
+
+```c
+unsigned char* GQueryKeyboard(void);
+```
+
+Returns a pointer to an internal 8-element `unsigned char` array of currently held key character codes (ASCII or `LWXGL_KEY_*` values). Slots that are not in use contain `0`. Up to eight keys can be tracked simultaneously.
+
+```c
+int GQueryKeyDown(int ch);
+```
+
+Returns `1` if the given character code is currently held, `0` otherwise. This is a convenience wrapper around the same 8-element array.
+
+### Example — polling the space bar in the frame callback
+
+```c
+void on_frame(int tick) {
+    if (GQueryKeyDown(' ')) {
+        // Space bar is held — fire weapon, jump, etc.
+    }
+
+    // Check multiple keys at once
+    unsigned char *keys = GQueryKeyboard();
+    for (int i = 0; i < 8; i++) {
+        if (keys[i] == LWXGL_KEY_LEFT)  { /* move left */ }
+        if (keys[i] == LWXGL_KEY_RIGHT) { /* move right */ }
+    }
+}
+```
+
+---
+
+## Mouse Events
+
+### Click callback
+
+```c
+void GEventAttachClick(void (*Click)(int x, int y, int btn));
+```
+
+Registers a callback that is invoked on mouse button **release**. The arguments are:
+
+| Parameter | Description |
+|-----------|-------------|
+| `x`, `y` | Cursor position at the time of release, in window pixels. |
+| `btn` | X11 button number: `1` = left, `2` = middle, `3` = right. |
+
+<Note>
+  The click callback is only reached if the release event was **not consumed** by a button or checkbox element. The event system checks all button and checkbox elements first; if the cursor is inside any of their bounds, their handler fires and the user click callback is **not** called.
+</Note>
+
+### Mouse polling
+
+```c
+void GQueryMouse(int* x, int* y, int* btn);
+```
+
+Writes the current mouse position and button state into the provided pointers.
+
+| Output | Description |
+|--------|-------------|
+| `*x`, `*y` | Current cursor position in window pixels. Set to `-1, -1` when the cursor is outside the window. |
+| `*btn` | Currently held button number (1/2/3), or `0` when no button is pressed. |
+
+### Example
+
+```c
+void on_click(int x, int y, int btn) {
+    if (btn == 1) {
+        printf("Left click at (%d, %d)\n", x, y);
+    } else if (btn == 3) {
+        printf("Right click at (%d, %d)\n", x, y);
+    }
+}
+
+void on_frame(int tick) {
+    int mx, my, mbtn;
+    GQueryMouse(&mx, &my, &mbtn);
+
+    if (mx >= 0) {
+        // Cursor is inside the window — track hover state, tooltips, etc.
+    }
+}
+
+// In setup:
+GEventAttachClick(on_click);
+```
+
+---
+
+## Window Close Event
+
+```c
+void GEventAttachDelete(int (*on_exit)(void));
+```
+
+Registers a callback that is invoked when the user clicks the window manager's close button (the `WM_DELETE_WINDOW` protocol message).
+
+- Return **`1`** to allow the close to proceed (`GWindowShouldClose` will return true and the main loop will exit).
+- Return **`0`** to cancel the close — the window stays open.
+
+If no handler is attached, the close always proceeds immediately.
+
+### Example — confirm before closing
+
+```c
+#include "libLWXGL.h"
+
+int on_close(void) {
+    if (!GQueryModalOpen()) {
+        GSpawnModal(1, "Quit the application?", GDeleteWindow);
+    }
+    return 0; // cancel the close; let the modal handle it
+}
+
+int main(void) {
+    GCreateWindow(640, 480, "Demo", 0);
+    GEventAttachDelete(on_close);
+    GSimpleWindowLoop(60, NULL);
+    GTerminateWindow();
+    return 0;
+}
+```
+
+<Note>
+  Button `onclick` callbacks are invoked by the event system during a `ButtonRelease` X11 event — inside `GHandleWindowEvents` — and always fire **before** the user `Click` callback. If a button consumed the release event the `Click` callback is not called at all for that event.
+</Note>

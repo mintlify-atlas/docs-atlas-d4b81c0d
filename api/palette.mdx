@@ -1,0 +1,139 @@
+---
+title: "Palette API — Runtime Color Modification"
+sidebarTitle: "Palette"
+description: "Reference for LWXGL palette functions: GPaletteQuery, GPaletteModify, and GPaletteReset for reading and changing the 16-entry color table at runtime."
+---
+
+LWXGL uses a fixed 16-entry color palette, initialized from the `color_palette[]` table in `main.cc` when `GCreateWindow` is called. Every color reference throughout the library — element colors, primitive drawing colors, image pixel values — is a palette index from `0` to `15`. The Palette API lets you read back the current RGB value of any entry, replace an entry with new RGB values, and restore all entries to their defaults.
+
+<Warning>
+  Modifying a palette entry affects the appearance of **all** elements and image canvases that reference that color index — not just future draws. A call to `GPaletteModify` or `GPaletteReset` with `redraw != 0` will immediately repaint every image element on screen to reflect the updated colors.
+</Warning>
+
+---
+
+### GPaletteQuery
+
+```c
+void GPaletteQuery(int idx, unsigned char* r, unsigned char* g, unsigned char* b);
+```
+
+Queries the current RGB components of palette entry `idx` by calling `XQueryColor` on the X11 colormap. The result reflects the color as actually allocated in the X server, which is scaled back from the 16-bit X11 representation.
+
+<ParamField path="idx" type="int">
+  Palette entry index to query (0–15).
+</ParamField>
+
+<ParamField path="r" type="unsigned char*">
+  Receives the red component of the color (0–255).
+</ParamField>
+
+<ParamField path="g" type="unsigned char*">
+  Receives the green component of the color (0–255).
+</ParamField>
+
+<ParamField path="b" type="unsigned char*">
+  Receives the blue component of the color (0–255).
+</ParamField>
+
+```c
+unsigned char r, g, b;
+GPaletteQuery(4, &r, &g, &b);
+printf("Palette[4] = rgb(%d, %d, %d)\n", r, g, b);
+// Default output: Palette[4] = rgb(186, 6, 6)
+```
+
+---
+
+### GPaletteModify
+
+```c
+void GPaletteModify(int idx, unsigned char r, unsigned char g, unsigned char b, int redraw);
+```
+
+Replaces palette entry `idx` with the given RGB values. The old X11 color allocation for that index is freed and a new one is allocated. If `redraw` is non-zero, `GRedrawAllImages()` is called after the update so that image canvases immediately reflect the new color.
+
+<ParamField path="idx" type="int">
+  Palette entry index to modify (0–15).
+</ParamField>
+
+<ParamField path="r" type="unsigned char">
+  New red component (0–255).
+</ParamField>
+
+<ParamField path="g" type="unsigned char">
+  New green component (0–255).
+</ParamField>
+
+<ParamField path="b" type="unsigned char">
+  New blue component (0–255).
+</ParamField>
+
+<ParamField path="redraw" type="int">
+  Pass a non-zero value to call `GRedrawAllImages()` immediately after updating the palette entry. Pass `0` to defer the visual update (useful when modifying several palette entries in one go — call `GRedrawAllImages()` manually once at the end).
+</ParamField>
+
+```c
+// Replace Dark Red (index 4) with a bright orange, then redraw
+GPaletteModify(4, 255, 140, 0, 1);
+
+// Batch-modify several entries without a redraw after each one
+GPaletteModify(1, 0, 0, 200, 0);
+GPaletteModify(9, 100, 100, 255, 0);
+GRedrawAllImages(); // One redraw for all changes
+```
+
+---
+
+### GPaletteReset
+
+```c
+void GPaletteReset(void);
+```
+
+Restores all 16 palette entries to their factory default values (defined in the `color_palette[]` array in `main.cc`). All existing X11 color allocations are freed first, then re-allocated from the defaults. Calls `GRedrawAllImages()` automatically after the reset.
+
+```c
+// Undo any runtime palette changes and force a full repaint
+GPaletteReset();
+```
+
+---
+
+### GRedrawAllImages
+
+```c
+void GRedrawAllImages(void);
+```
+
+Iterates every element slot and, for each image element, invalidates its shadow (previous-frame) buffer and calls `GUpdateImage` to force a complete pixel-by-pixel repaint using the current palette. Typically called internally by `GPaletteModify` (when `redraw != 0`) and `GPaletteReset`, but may also be called manually whenever a full image refresh is needed.
+
+```c
+// Manually trigger a full repaint of all image canvases
+GRedrawAllImages();
+```
+
+---
+
+## Default Palette
+
+The following table shows the 16 default palette entries as defined in `color_palette[]` in `main.cc`. These are the values restored by `GPaletteReset`.
+
+| Index | Name | R | G | B |
+|:---:|---|:---:|:---:|:---:|
+| 0 | Black | 0 | 0 | 0 |
+| 1 | Dark Blue | 3 | 3 | 173 |
+| 2 | Dark Green | 0 | 170 | 0 |
+| 3 | Dark Cyan | 0 | 168 | 168 |
+| 4 | Dark Red | 186 | 6 | 6 |
+| 5 | Dark Magenta | 168 | 0 | 168 |
+| 6 | Orange | 230 | 126 | 34 |
+| 7 | Light Gray | 168 | 168 | 168 |
+| 8 | Dark Gray | 85 | 87 | 83 |
+| 9 | Light Blue | 87 | 87 | 255 |
+| 10 | Light Green | 85 | 255 | 85 |
+| 11 | Light Cyan | 96 | 240 | 240 |
+| 12 | Light Red | 255 | 85 | 85 |
+| 13 | Light Magenta | 240 | 84 | 240 |
+| 14 | Yellow | 244 | 242 | 54 |
+| 15 | White | 255 | 255 | 255 |
